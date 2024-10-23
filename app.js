@@ -1,89 +1,114 @@
-paper.install(window);
-window.onload = function() {
+document.addEventListener('DOMContentLoaded', function() {
+    // Initialize Paper.js
     paper.setup('canvas');
-
+    
+    // Set up some default values
     const config = {
         snapEnabled: false,
         measureEnabled: true,
         snapDistance: 20,
-        scale: 1 // 1 pixel = 1mm
+        scale: 1
     };
 
+    // Test that Paper.js is working
+    console.log('Paper.js initialized');
+
     function createRectangle(width, height) {
-        const rectangle = new Path.Rectangle({
-            point: view.center.subtract(new Point(width/2, height/2)),
-            size: new Size(width, height),
+        console.log('Creating rectangle:', width, height); // Debug log
+
+        // Convert measurements to numbers and validate
+        width = Number(width);
+        height = Number(height);
+        
+        if (isNaN(width) || isNaN(height) || width <= 0 || height <= 0) {
+            alert('Vennligst skriv inn gyldige mål');
+            return;
+        }
+
+        // Create the rectangle centered on the screen
+        const center = paper.view.center;
+        const topLeft = new paper.Point(
+            center.x - width/2,
+            center.y - height/2
+        );
+
+        const rectangle = new paper.Path.Rectangle({
+            point: topLeft,
+            size: new paper.Size(width, height),
             strokeColor: 'black',
-            fillColor: new Color(0, 0.5, 1, 0.5),
+            fillColor: new paper.Color(0, 0.5, 1, 0.3),
             strokeWidth: 2
         });
 
-        // Add measurement labels
-        const labels = new Group();
-        
-        // Width label
-        const widthLabel = new PointText({
-            point: rectangle.bounds.center.add(new Point(0, -height/2 - 20)),
+        // Make rectangle draggable
+        rectangle.onMouseDown = function(event) {
+            console.log('Rectangle clicked');
+        };
+
+        rectangle.onMouseDrag = function(event) {
+            this.position = this.position.add(event.delta);
+        };
+
+        // Add measurements
+        const widthLabel = new paper.PointText({
+            point: new paper.Point(center.x, center.y - height/2 - 10),
             content: width + ' mm',
             justification: 'center',
             fillColor: 'black',
             fontSize: 14
         });
-        
-        // Height label
-        const heightLabel = new PointText({
-            point: rectangle.bounds.center.add(new Point(width/2 + 20, 0)),
+
+        const heightLabel = new paper.PointText({
+            point: new paper.Point(center.x + width/2 + 10, center.y),
             content: height + ' mm',
             justification: 'left',
             fillColor: 'black',
             fontSize: 14
         });
 
-        labels.addChildren([widthLabel, heightLabel]);
-        labels.visible = config.measureEnabled;
-
-        // Make rectangle interactive
-        rectangle.onMouseDrag = function(event) {
+        // Group rectangle with its labels
+        const group = new paper.Group([rectangle, widthLabel, heightLabel]);
+        
+        // Make the entire group draggable
+        group.onMouseDrag = function(event) {
             this.position = this.position.add(event.delta);
-            updateLabels();
-            if (config.snapEnabled) checkSnap();
         };
 
-        function updateLabels() {
-            widthLabel.point = rectangle.bounds.center.add(new Point(0, -height/2 - 20));
-            heightLabel.point = rectangle.bounds.center.add(new Point(width/2 + 20, 0));
-        }
-
-        function checkSnap() {
-            // Add snapping logic here
-        }
-
-        return { rectangle, labels };
+        // Ensure we see the new elements
+        paper.view.draw();
+        console.log('Rectangle created');
     }
 
     // UI Controls
-    document.getElementById('addRect').onclick = function() {
-        const width = Number(document.getElementById('width').value);
-        const height = Number(document.getElementById('height').value);
-        if (width > 0 && height > 0) {
-            createRectangle(width, height);
-        }
-    };
+    document.getElementById('addRect').addEventListener('click', function() {
+        const width = document.getElementById('width').value;
+        const height = document.getElementById('height').value;
+        console.log('Button clicked:', width, height); // Debug log
+        createRectangle(width, height);
+    });
 
-    document.getElementById('toggleSnap').onclick = function() {
+    document.getElementById('toggleSnap').addEventListener('click', function() {
         config.snapEnabled = !config.snapEnabled;
         this.textContent = config.snapEnabled ? 'Slå av snap' : 'Slå på snap';
-    };
+    });
 
-    document.getElementById('toggleMeasure').onclick = function() {
+    document.getElementById('toggleMeasure').addEventListener('click', function() {
         config.measureEnabled = !config.measureEnabled;
         this.textContent = config.measureEnabled ? 'Skjul mål' : 'Vis mål';
-        project.activeLayer.children.forEach(child => {
-            if (child instanceof Group) {
-                child.visible = config.measureEnabled;
+        // Update visibility of all measurements
+        paper.project.activeLayer.children.forEach(child => {
+            if (child instanceof paper.Group) {
+                child.children.forEach(item => {
+                    if (item instanceof paper.PointText) {
+                        item.visible = config.measureEnabled;
+                    }
+                });
             }
         });
-    };
+    });
 
-    view.draw();
-};
+    // Handle window resize
+    window.onresize = function() {
+        paper.view.update();
+    };
+});
