@@ -66,13 +66,38 @@ document.addEventListener('DOMContentLoaded', function() {
             fontSize: 14
         });
 
-        // Group rectangle with its labels
-        const group = new paper.Group([rectangle, widthLabel, heightLabel]);
-        
-        // Make the entire group draggable
-        group.onMouseDrag = function(event) {
-            this.position = this.position.add(event.delta);
-        };
+// Group rectangle with its labels
+const group = new paper.Group([rectangle, widthLabel, heightLabel]);
+
+// Make the entire group draggable
+group.onMouseDrag = function(event) {
+    // Move the entire group
+    this.translate(event.delta);
+    
+    // Update label positions relative to rectangle
+    widthLabel.point = new paper.Point(
+        rectangle.bounds.center.x,
+        rectangle.bounds.top - 10
+    );
+    
+    heightLabel.point = new paper.Point(
+        rectangle.bounds.right + 10,
+        rectangle.bounds.center.y
+    );
+};
+
+// Also update positions when rectangle is resized or rotated
+rectangle.onChange = function() {
+    widthLabel.point = new paper.Point(
+        this.bounds.center.x,
+        this.bounds.top - 10
+    );
+    
+    heightLabel.point = new paper.Point(
+        this.bounds.right + 10,
+        this.bounds.center.y
+    );
+};
 
         // Ensure we see the new elements
         paper.view.draw();
