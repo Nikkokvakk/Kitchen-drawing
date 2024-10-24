@@ -13,97 +13,121 @@ document.addEventListener('DOMContentLoaded', function() {
     // Test that Paper.js is working
     console.log('Paper.js initialized');
 
-    function createRectangle(width, height) {
-        console.log('Creating rectangle:', width, height); // Debug log
+function createRectangle(width, height) {
+    console.log('Creating rectangle:', width, height);
 
-        // Convert measurements to numbers and validate
-        width = Number(width);
-        height = Number(height);
-        
-        if (isNaN(width) || isNaN(height) || width <= 0 || height <= 0) {
-            alert('Vennligst skriv inn gyldige mål');
-            return;
-        }
-
-        // Create the rectangle centered on the screen
-        const center = paper.view.center;
-        const topLeft = new paper.Point(
-            center.x - width/2,
-            center.y - height/2
-        );
-
-        const rectangle = new paper.Path.Rectangle({
-            point: topLeft,
-            size: new paper.Size(width, height),
-            strokeColor: 'black',
-            fillColor: new paper.Color(0, 0.5, 1, 0.3),
-            strokeWidth: 2
-        });
-
-        // Make rectangle draggable
-        rectangle.onMouseDown = function(event) {
-            console.log('Rectangle clicked');
-        };
-
-        rectangle.onMouseDrag = function(event) {
-            this.position = this.position.add(event.delta);
-        };
-
-        // Add measurements
-        const widthLabel = new paper.PointText({
-            point: new paper.Point(center.x, center.y - height/2 - 10),
-            content: width + ' mm',
-            justification: 'center',
-            fillColor: 'black',
-            fontSize: 14
-        });
-
-        const heightLabel = new paper.PointText({
-            point: new paper.Point(center.x + width/2 + 10, center.y),
-            content: height + ' mm',
-            justification: 'left',
-            fillColor: 'black',
-            fontSize: 14
-        });
-
-// Group rectangle with its labels
-const group = new paper.Group([rectangle, widthLabel, heightLabel]);
-
-// Make the entire group draggable
-group.onMouseDrag = function(event) {
-    // Move the entire group
-    this.translate(event.delta);
+    width = Number(width);
+    height = Number(height);
     
-    // Update label positions relative to rectangle
-    widthLabel.point = new paper.Point(
-        rectangle.bounds.center.x,
-        rectangle.bounds.top - 10
-    );
-    
-    heightLabel.point = new paper.Point(
-        rectangle.bounds.right + 10,
-        rectangle.bounds.center.y
-    );
-};
-
-// Also update positions when rectangle is resized or rotated
-rectangle.onChange = function() {
-    widthLabel.point = new paper.Point(
-        this.bounds.center.x,
-        this.bounds.top - 10
-    );
-    
-    heightLabel.point = new paper.Point(
-        this.bounds.right + 10,
-        this.bounds.center.y
-    );
-};
-
-        // Ensure we see the new elements
-        paper.view.draw();
-        console.log('Rectangle created');
+    if (isNaN(width) || isNaN(height) || width <= 0 || height <= 0) {
+        alert('Vennligst skriv inn gyldige mål');
+        return;
     }
 
+    const center = paper.view.center;
+    const topLeft = new paper.Point(
+        center.x - width/2,
+        center.y - height/2
+    );
+
+    const rectangle = new paper.Path.Rectangle({
+        point: topLeft,
+        size: new paper.Size(width, height),
+        strokeColor: 'black',
+        fillColor: new paper.Color(0, 0.5, 1, 0.3),
+        strokeWidth: 2
+    });
+
+    // Create labels for all four sides
+    const topLabel = new paper.PointText({
+        point: new paper.Point(center.x, center.y - height/2 - 10),
+        content: width + ' mm',
+        justification: 'center',
+        fillColor: 'black',
+        fontSize: 14
+    });
+
+    const rightLabel = new paper.PointText({
+        point: new paper.Point(center.x + width/2 + 10, center.y),
+        content: height + ' mm',
+        justification: 'left',
+        fillColor: 'black',
+        fontSize: 14
+    });
+
+    const bottomLabel = new paper.PointText({
+        point: new paper.Point(center.x, center.y + height/2 + 20),
+        content: width + ' mm',
+        justification: 'center',
+        fillColor: 'black',
+        fontSize: 14
+    });
+
+    const leftLabel = new paper.PointText({
+        point: new paper.Point(center.x - width/2 - 10, center.y),
+        content: height + ' mm',
+        justification: 'right',
+        fillColor: 'black',
+        fontSize: 14
+    });
+
+    // Group rectangle with all labels
+    const group = new paper.Group([rectangle, topLabel, rightLabel, bottomLabel, leftLabel]);
+    
+    // Make the entire group draggable with 1:1 movement
+    group.onMouseDrag = function(event) {
+        // Use direct event delta for 1:1 movement
+        this.translate(event.delta);
+        
+        // Update all label positions relative to rectangle
+        topLabel.point = new paper.Point(
+            rectangle.bounds.center.x,
+            rectangle.bounds.top - 10
+        );
+        
+        rightLabel.point = new paper.Point(
+            rectangle.bounds.right + 10,
+            rectangle.bounds.center.y
+        );
+        
+        bottomLabel.point = new paper.Point(
+            rectangle.bounds.center.x,
+            rectangle.bounds.bottom + 20
+        );
+        
+        leftLabel.point = new paper.Point(
+            rectangle.bounds.left - 10,
+            rectangle.bounds.center.y
+        );
+    };
+
+    // Update positions when rectangle is resized or rotated
+    rectangle.onChange = function() {
+        topLabel.point = new paper.Point(
+            this.bounds.center.x,
+            this.bounds.top - 10
+        );
+        
+        rightLabel.point = new paper.Point(
+            this.bounds.right + 10,
+            this.bounds.center.y
+        );
+        
+        bottomLabel.point = new paper.Point(
+            this.bounds.center.x,
+            this.bounds.bottom + 20
+        );
+        
+        leftLabel.point = new paper.Point(
+            this.bounds.left - 10,
+            this.bounds.center.y
+        );
+    };
+
+    // Ensure we see the new elements
+    paper.view.draw();
+    console.log('Rectangle created');
+}
     // UI Controls
     document.getElementById('addRect').addEventListener('click', function() {
         const width = document.getElementById('width').value;
