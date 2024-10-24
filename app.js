@@ -6,7 +6,7 @@ window.onload = function() {
     const config = {
         snapEnabled: false,
         measureEnabled: true,
-        snapThreshold: 20,
+        snapThreshold: 50, // Increased to 50px
         scale: 1,
         guideLineColors: {
             cornerToCorner: 'red',
@@ -15,65 +15,129 @@ window.onload = function() {
         }
     };
 
-    // Guide line and measurement display
-    let guideLine = null;
-    let guideText = null;
-    let snapPoints = null;
+    // Guide lines array to store multiple lines
+    let guideLines = [];
+    let currentSnaps = [];
+
+    function clearGuideLines() {
+        guideLines.forEach(line => line.remove());
+        guideLines = [];
+        currentSnaps = [];
+    }
 
     function createGuideLine(start, end, type) {
-        // Remove existing guide elements
-        if (guideLine) guideLine.remove();
-        if (guideText) guideText.remove();
-
-        // Create new guide line
-        guideLine = new paper.Path.Line({
+        const line = new paper.Path.Line({
             from: start,
             to: end,
             strokeColor: config.guideLineColors[type],
-            strokeWidth: 1,
-            dashArray: null
+            strokeWidth: 2,
+            strokeCap: 'round'
         });
-
-        // Calculate distance
-        const distance = start.getDistance(end);
-        const roundedDistance = Math.round(distance);
-
-        // Create text with background
-        const midPoint = start.add(end).divide(2);
-        const background = new paper.Path.Rectangle({
-            center: midPoint,
-            size: [55, 20],
-            fillColor: 'white',
-            opacity: 0.8
-        });
-
-        guideText = new paper.PointText({
-            point: midPoint,
-            content: `${roundedDistance} mm`,
-            fillColor: 'black',
-            fontSize: 12,
-            justification: 'center'
-        });
-
-        // Center the text vertically
-        guideText.position = midPoint;
-        background.position = guideText.position;
-
-        // Group text and background
-        guideText = new paper.Group([background, guideText]);
-        
-        return { line: guideLine, text: guideText };
+        guideLines.push(line);
+        return line;
     }
 
-    function removeGuideElements() {
-        if (guideLine) {
-            guideLine.remove();
-            guideLine = null;
+    function findAllSnapPoints(activeGroup, otherGroup) {
+        const snapPoints = [];
+        const activeRect = activeGroup.children[0];
+        const otherRect = otherGroup.children[0];
+        const activeBounds = activeRect.bounds;
+        const otherBounds = otherRect.bounds;
+
+        // Get corners
+        const activeCorners = [
+            { point: activeBounds.topLeft, name: 'topLeft' },
+            { point: activeBounds.topRight, name: 'topRight' },
+            { point: activeBounds.bottomLeft, name: 'bottomLeft' },
+            { point: activeBounds.bottomRight, name: 'bottomRight' }
+        ];
+
+        const otherCorners = [
+            { point: otherBounds.topLeft, name: 'topLeft' },
+            { point: otherBounds.topRight, name: 'topRight' },
+            { point: otherBounds.bottomLeft, name: 'bottomLeft' },
+            { point: otherBounds.bottomRight, name: 'bottomRight' }
+        ];
+
+        // Corner to Corner snaps
+        for (let activeCorner of activeCorners) {
+            for (let otherCorner of otherCorners) {
+                const distance = activeCorner.point.getDistance(otherCorner.point);
+                if (distance < config.snapThreshold) {
+                    snapPoints.push({
+                        type: 'cornerToCorner',
+                        from: activeCorner.point,
+                        to: otherCorner.point,
+                        distance: distance,
+                        translation: otherCorner.point.subtract(activeCorner.point)
+                    });
+                }
+            }
         }
-        if (guideText) {
-            guideText.remove();
-            guideText = null;
+
+        // Corner to Edge snaps
+        const otherEdges = [
+            { start: otherBounds.topLeft, end: otherBounds.topRight, name: 'top' },
+            { start: otherBounds.topRight, end: otherBounds.bottomRight, name: 'right' },
+            { start: otherBounds.bottomRight, end: otherBounds.bottomLeft, name: 'bottom' },
+            { start: otherBounds.bottomLeft, end: otherBounds.topLeft, name: 'left' }
+        ];
+
+        for (let activeCorner of activeCorners) {
+            for (let edge of otherEdges) {
+                const nearestPoint = getNearestPointOnLine(activeCorner.point, edge.start, edge.end);
+                const distance = activeCorner.point.getDistance(nearestPoint);
+                if (distance < config.snapThreshold) {
+                    snapPoints.push({
+                        type: 'cornerToEdge',
+                        from: activeCorner.point,
+                        to: nearestPoint,
+                        distance: distance,
+                        translation: nearestPoint.subtract(activeCorner.point)
+                    });
+                }
+            }
         }
+
+        // Edge to Edge snaps
+        const activeEdges = [
+            { start: activeBounds.topLeft, end: activeBounds.topRight, name: 'top' },
+            { start: activeBounds.topRight, end: activeBounds.bottomRight, name: 'right' },
+            { start: activeBounds.bottomRight, end: activeBounds.bottomLeft, name: 'bottom' },
+            { start: activeBounds.bottomLeft, end: activeBounds.topLeft, name: 'left' }
+        ];
+
+        for (let activeEdge of activeEdges) {
+            for (let otherEdge of otherEdges) {
+                const distance = Math.min(
+                    activeEdge.start.getDistance(otherEdge.start),
+                    activeEdge.start.getDistance(otherEdge.end),
+                    activeEdge.end.getDistance(otherEdge.start),
+                    activeEdge.end.getDistance(otherEdge.end)
+                );
+                if (distance < config.snapThreshold) {
+                    snapPoints.push({
+                        type: 'edgeToEdge',
+                        from: activeEdge.start,
+                        to: otherEdge.start,
+                        distance: distance,
+                        translation: getEdgeAlignment(activeEdge, otherEdge)
+                    });
+                }
+            }
+        }
+
+        return snapPoints;
+    }
+
+    function getEdgeAlignment(edge1, edge2) {
+        // Calculate translation to align edges
+        const translation = edge2.start.subtract(edge1.start);
+        if (edge1.name === edge2.name) {
+            return translation;
+        }
+        // Handle perpendicular edges
+        return translation;
     }
 
     function getNearestPointOnLine(p, lineStart, lineEnd) {
@@ -88,77 +152,35 @@ window.onload = function() {
         return lineStart.add(lineNorm.multiply(projection));
     }
 
-    function findSnapPoints(activeGroup, otherGroup) {
-        const activeRect = activeGroup.children[0];
-        const otherRect = otherGroup.children[0];
-        const activeBounds = activeRect.bounds;
-        const otherBounds = otherRect.bounds;
-
-        // Get corners of both rectangles
-        const activeCorners = [
-            activeBounds.topLeft,
-            activeBounds.topRight,
-            activeBounds.bottomLeft,
-            activeBounds.bottomRight
-        ];
-
-        const otherCorners = [
-            otherBounds.topLeft,
-            otherBounds.topRight,
-            otherBounds.bottomLeft,
-            otherBounds.bottomRight
-        ];
-
-        let minDistance = Infinity;
-        let closestPoints = null;
-        let snapType = null;
-
-        // Check corner-to-corner
-        for (let activeCorner of activeCorners) {
-            for (let otherCorner of otherCorners) {
-                const distance = activeCorner.getDistance(otherCorner);
-                if (distance < minDistance && distance < config.snapThreshold) {
-                    minDistance = distance;
-                    closestPoints = {
-                        from: activeCorner,
-                        to: otherCorner
-                    };
-                    snapType = 'cornerToCorner';
-                }
-            }
+    function showSnapDialog(snaps) {
+        let options = '';
+        const availableTypes = new Set(snaps.map(snap => snap.type));
+        
+        if (availableTypes.has('cornerToCorner')) {
+            options += '🔴 Corner to Corner\n';
         }
-
-        // If no corner-to-corner found, check corner-to-edge
-        if (!closestPoints) {
-            const otherEdges = [
-                { start: otherBounds.topLeft, end: otherBounds.topRight },
-                { start: otherBounds.topRight, end: otherBounds.bottomRight },
-                { start: otherBounds.bottomRight, end: otherBounds.bottomLeft },
-                { start: otherBounds.bottomLeft, end: otherBounds.topLeft }
-            ];
-
-            for (let activeCorner of activeCorners) {
-                for (let edge of otherEdges) {
-                    const nearestPoint = getNearestPointOnLine(activeCorner, edge.start, edge.end);
-                    const distance = activeCorner.getDistance(nearestPoint);
-                    if (distance < minDistance && distance < config.snapThreshold) {
-                        minDistance = distance;
-                        closestPoints = {
-                            from: activeCorner,
-                            to: nearestPoint
-                        };
-                        snapType = 'cornerToEdge';
-                    }
-                }
-            }
+        if (availableTypes.has('cornerToEdge')) {
+            options += '🟢 Corner to Edge\n';
         }
+        if (availableTypes.has('edgeToEdge')) {
+            options += '⚫ Edge to Edge\n';
+        }
+        
+        const choice = window.prompt(
+            'Choose snap type:\n\n' + options + '\nOr press Cancel',
+            ''
+        );
 
-        return { points: closestPoints, type: snapType, distance: minDistance };
+        if (choice === null) return null;
+        
+        const lowerChoice = choice.toLowerCase().trim();
+        if (lowerChoice.includes('corner to corner')) return 'cornerToCorner';
+        if (lowerChoice.includes('corner to edge')) return 'cornerToEdge';
+        if (lowerChoice.includes('edge to edge')) return 'edgeToEdge';
+        return null;
     }
 
     function createRectangle(width, height) {
-        console.log('Creating rectangle:', width, height); // Debug log
-
         const center = paper.view.center;
         const topLeft = new paper.Point(
             center.x - width/2,
@@ -174,7 +196,7 @@ window.onload = function() {
             strokeScaleEnabled: false
         });
 
-        // Create labels for all four sides
+        // Create labels
         const topLabel = new paper.PointText({
             point: new paper.Point(center.x, center.y - height/2 - 10),
             content: width + ' mm',
@@ -207,16 +229,13 @@ window.onload = function() {
             fontSize: 14
         });
 
-        // Group rectangle with all labels
         const group = new paper.Group([rectangle, topLabel, rightLabel, bottomLabel, leftLabel]);
         
-        // Store original position for potential snap cancellation
         let originalPosition = null;
-        let potentialSnap = null;
 
         group.onMouseDown = function(event) {
             originalPosition = this.position.clone();
-            removeGuideElements();
+            clearGuideLines();
         };
         
         group.onMouseDrag = function(event) {
@@ -224,40 +243,33 @@ window.onload = function() {
             updateLabels(this);
 
             if (config.snapEnabled) {
-                // Check for potential snap points with other rectangles
-                let closestSnap = null;
+                clearGuideLines();
+                currentSnaps = [];
+
                 paper.project.activeLayer.children.forEach(otherGroup => {
                     if (otherGroup !== this && otherGroup instanceof paper.Group) {
-                        const snapResult = findSnapPoints(this, otherGroup);
-                        if (snapResult.points && (!closestSnap || snapResult.distance < closestSnap.distance)) {
-                            closestSnap = snapResult;
-                        }
+                        const snapResults = findAllSnapPoints(this, otherGroup);
+                        snapResults.forEach(snap => {
+                            createGuideLine(snap.from, snap.to, snap.type);
+                            currentSnaps.push(snap);
+                        });
                     }
                 });
-
-                // Update guide line if snap points found
-                if (closestSnap && closestSnap.points) {
-                    createGuideLine(closestSnap.points.from, closestSnap.points.to, closestSnap.type);
-                    potentialSnap = closestSnap;
-                } else {
-                    removeGuideElements();
-                    potentialSnap = null;
-                }
             }
         };
 
         group.onMouseUp = function(event) {
-            if (config.snapEnabled && potentialSnap && potentialSnap.points) {
-                const confirmed = confirm("Snap together?");
-                if (confirmed) {
-                    // Calculate and apply the snap translation
-                    const translation = potentialSnap.points.to.subtract(potentialSnap.points.from);
-                    this.translate(translation);
-                    updateLabels(this);
+            if (config.snapEnabled && currentSnaps.length > 0) {
+                const snapType = showSnapDialog(currentSnaps);
+                if (snapType) {
+                    const selectedSnap = currentSnaps.find(snap => snap.type === snapType);
+                    if (selectedSnap) {
+                        this.translate(selectedSnap.translation);
+                        updateLabels(this);
+                    }
                 }
-                removeGuideElements();
-                potentialSnap = null;
             }
+            clearGuideLines();
         };
 
         function updateLabels(group) {
@@ -311,7 +323,7 @@ window.onload = function() {
     document.getElementById('toggleSnap').addEventListener('click', function() {
         config.snapEnabled = !config.snapEnabled;
         this.textContent = config.snapEnabled ? 'Disable Snap' : 'Enable Snap';
-        removeGuideElements();
+        clearGuideLines();
     });
 
     document.getElementById('toggleMeasure').addEventListener('click', function() {
@@ -330,7 +342,6 @@ window.onload = function() {
         paper.view.draw();
     });
 
-    // Handle window resize
     window.addEventListener('resize', function() {
         paper.view.update();
     });
