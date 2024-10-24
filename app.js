@@ -13,108 +13,112 @@ document.addEventListener('DOMContentLoaded', function() {
     // Test that Paper.js is working
     console.log('Paper.js initialized');
 
-  function checkSnap(activeGroup) {
-    const snapThreshold = 10; // Reduced from 20 to 10 pixels
-    const alignmentThreshold = 10; // Threshold for edge alignment
+function checkSnap(activeGroup) {
+    const snapThreshold = 10; // Distance for snap detection
+    const cornerSnapThreshold = 15; // Slightly larger threshold for corner snapping
     const activeRect = activeGroup.children[0];
     const activeBounds = activeRect.bounds;
+    let wasSnapped = false; // Track if snapping occurred
 
     paper.project.activeLayer.children.forEach(otherGroup => {
         if (otherGroup !== activeGroup && otherGroup instanceof paper.Group) {
             const otherRect = otherGroup.children[0];
             const otherBounds = otherRect.bounds;
 
-            // Edge snapping (existing logic)
-            // Right to left
-            if (Math.abs(activeBounds.right - otherBounds.left) < snapThreshold &&
-                activeBounds.top < otherBounds.bottom &&
-                activeBounds.bottom > otherBounds.top) {
-                activeGroup.translate(new paper.Point(
-                    otherBounds.left - activeBounds.right,
-                    0
-                ));
-                
-                // Align to top or bottom edge if close
-                if (Math.abs(activeBounds.top - otherBounds.top) < alignmentThreshold) {
-                    activeGroup.translate(new paper.Point(0, otherBounds.top - activeBounds.top));
-                } else if (Math.abs(activeBounds.bottom - otherBounds.bottom) < alignmentThreshold) {
-                    activeGroup.translate(new paper.Point(0, otherBounds.bottom - activeBounds.bottom));
-                }
-            }
+            // Store original position before any snapping
+            const originalPosition = activeGroup.position.clone();
+            
+            // Check corners first
+            const corners = [
+                { active: { x: activeBounds.left, y: activeBounds.top }, 
+                  other: { x: otherBounds.right, y: otherBounds.bottom } },
+                { active: { x: activeBounds.right, y: activeBounds.top }, 
+                  other: { x: otherBounds.left, y: otherBounds.bottom } },
+                { active: { x: activeBounds.left, y: activeBounds.bottom }, 
+                  other: { x: otherBounds.right, y: otherBounds.top } },
+                { active: { x: activeBounds.right, y: activeBounds.bottom }, 
+                  other: { x: otherBounds.left, y: otherBounds.top } }
+            ];
 
-            // Left to right
-            if (Math.abs(activeBounds.left - otherBounds.right) < snapThreshold &&
-                activeBounds.top < otherBounds.bottom &&
-                activeBounds.bottom > otherBounds.top) {
-                activeGroup.translate(new paper.Point(
-                    otherBounds.right - activeBounds.left,
-                    0
-                ));
-                
-                // Align to top or bottom edge if close
-                if (Math.abs(activeBounds.top - otherBounds.top) < alignmentThreshold) {
-                    activeGroup.translate(new paper.Point(0, otherBounds.top - activeBounds.top));
-                } else if (Math.abs(activeBounds.bottom - otherBounds.bottom) < alignmentThreshold) {
-                    activeGroup.translate(new paper.Point(0, otherBounds.bottom - activeBounds.bottom));
-                }
-            }
+            // Check each corner
+            for (let corner of corners) {
+                const distance = Math.sqrt(
+                    Math.pow(corner.active.x - corner.other.x, 2) + 
+                    Math.pow(corner.active.y - corner.other.y, 2)
+                );
 
-            // Bottom to top
-            if (Math.abs(activeBounds.bottom - otherBounds.top) < snapThreshold &&
-                activeBounds.left < otherBounds.right &&
-                activeBounds.right > otherBounds.left) {
-                activeGroup.translate(new paper.Point(
-                    0,
-                    otherBounds.top - activeBounds.bottom
-                ));
-                
-                // Align to left or right edge if close
-                if (Math.abs(activeBounds.left - otherBounds.left) < alignmentThreshold) {
-                    activeGroup.translate(new paper.Point(otherBounds.left - activeBounds.left, 0));
-                } else if (Math.abs(activeBounds.right - otherBounds.right) < alignmentThreshold) {
-                    activeGroup.translate(new paper.Point(otherBounds.right - activeBounds.right, 0));
-                }
-            }
-
-            // Top to bottom
-            if (Math.abs(activeBounds.top - otherBounds.bottom) < snapThreshold &&
-                activeBounds.left < otherBounds.right &&
-                activeBounds.right > otherBounds.left) {
-                activeGroup.translate(new paper.Point(
-                    0,
-                    otherBounds.bottom - activeBounds.top
-                ));
-                
-                // Align to left or right edge if close
-                if (Math.abs(activeBounds.left - otherBounds.left) < alignmentThreshold) {
-                    activeGroup.translate(new paper.Point(otherBounds.left - activeBounds.left, 0));
-                } else if (Math.abs(activeBounds.right - otherBounds.right) < alignmentThreshold) {
-                    activeGroup.translate(new paper.Point(otherBounds.right - activeBounds.right, 0));
-                }
-            }
-
-            // Center alignment snapping (when edges are already aligned)
-            if (Math.abs(activeBounds.left - otherBounds.left) < snapThreshold ||
-                Math.abs(activeBounds.right - otherBounds.right) < snapThreshold) {
-                // Vertical center alignment
-                if (Math.abs((activeBounds.top + activeBounds.bottom)/2 - 
-                           (otherBounds.top + otherBounds.bottom)/2) < alignmentThreshold) {
-                    activeGroup.translate(new paper.Point(0, 
-                        (otherBounds.top + otherBounds.bottom)/2 - (activeBounds.top + activeBounds.bottom)/2));
-                }
-            }
-
-            if (Math.abs(activeBounds.top - otherBounds.top) < snapThreshold ||
-                Math.abs(activeBounds.bottom - otherBounds.bottom) < snapThreshold) {
-                // Horizontal center alignment
-                if (Math.abs((activeBounds.left + activeBounds.right)/2 - 
-                           (otherBounds.left + otherBounds.right)/2) < alignmentThreshold) {
+                if (distance < cornerSnapThreshold) {
                     activeGroup.translate(new paper.Point(
-                        (otherBounds.left + otherBounds.right)/2 - (activeBounds.left + activeBounds.right)/2, 0));
+                        corner.other.x - corner.active.x,
+                        corner.other.y - corner.active.y
+                    ));
+                    wasSnapped = true;
+                    return; // Exit after corner snap
                 }
+            }
+
+            // If no corner snap, check edges
+            if (!wasSnapped) {
+                // Right to left
+                if (Math.abs(activeBounds.right - otherBounds.left) < snapThreshold &&
+                    activeBounds.top < otherBounds.bottom &&
+                    activeBounds.bottom > otherBounds.top) {
+                    activeGroup.translate(new paper.Point(
+                        otherBounds.left - activeBounds.right,
+                        0
+                    ));
+                    wasSnapped = true;
+                }
+
+                // Left to right
+                if (Math.abs(activeBounds.left - otherBounds.right) < snapThreshold &&
+                    activeBounds.top < otherBounds.bottom &&
+                    activeBounds.bottom > otherBounds.top) {
+                    activeGroup.translate(new paper.Point(
+                        otherBounds.right - activeBounds.left,
+                        0
+                    ));
+                    wasSnapped = true;
+                }
+
+                // Bottom to top
+                if (Math.abs(activeBounds.bottom - otherBounds.top) < snapThreshold &&
+                    activeBounds.left < otherBounds.right &&
+                    activeBounds.right > otherBounds.left) {
+                    activeGroup.translate(new paper.Point(
+                        0,
+                        otherBounds.top - activeBounds.bottom
+                    ));
+                    wasSnapped = true;
+                }
+
+                // Top to bottom
+                if (Math.abs(activeBounds.top - otherBounds.bottom) < snapThreshold &&
+                    activeBounds.left < otherBounds.right &&
+                    activeBounds.right > otherBounds.left) {
+                    activeGroup.translate(new paper.Point(
+                        0,
+                        otherBounds.bottom - activeBounds.top
+                    ));
+                    wasSnapped = true;
+                }
+            }
+
+            // If we moved too fast and are now beyond threshold, cancel snap
+            const currentPosition = activeGroup.position;
+            const moveDistance = Math.sqrt(
+                Math.pow(currentPosition.x - originalPosition.x, 2) +
+                Math.pow(currentPosition.y - originalPosition.y, 2)
+            );
+
+            if (moveDistance > snapThreshold * 1.5) {
+                activeGroup.position = originalPosition;
+                wasSnapped = false;
             }
         }
     });
+
+    return wasSnapped;
 }
     function createRectangle(width, height) {
         console.log('Creating rectangle:', width, height);
@@ -178,34 +182,39 @@ document.addEventListener('DOMContentLoaded', function() {
         const group = new paper.Group([rectangle, topLabel, rightLabel, bottomLabel, leftLabel]);
         
         // Make the entire group draggable
-        group.onMouseDrag = function(event) {
-            this.translate(event.delta);
-            
-            if (config.snapEnabled) {
-                checkSnap(this);
+group.onMouseDrag = function(event) {
+        const prevPosition = this.position.clone();
+        this.translate(event.delta);
+        
+        if (config.snapEnabled) {
+            const wasSnapped = checkSnap(this);
+            // If we're moving fast enough, break out of snap
+            if (wasSnapped && event.delta.length > config.snapDistance * 1.5) {
+                this.position = prevPosition.add(event.delta);
             }
+        }
 
-            // Update all label positions
-            topLabel.point = new paper.Point(
-                rectangle.bounds.center.x,
-                rectangle.bounds.top - 10
-            );
-            
-            rightLabel.point = new paper.Point(
-                rectangle.bounds.right + 10,
-                rectangle.bounds.center.y
-            );
-            
-            bottomLabel.point = new paper.Point(
-                rectangle.bounds.center.x,
-                rectangle.bounds.bottom + 20
-            );
-            
-            leftLabel.point = new paper.Point(
-                rectangle.bounds.left - 10,
-                rectangle.bounds.center.y
-            );
-        };
+        // Update all label positions
+        topLabel.point = new paper.Point(
+            rectangle.bounds.center.x,
+            rectangle.bounds.top - 10
+        );
+        
+        rightLabel.point = new paper.Point(
+            rectangle.bounds.right + 10,
+            rectangle.bounds.center.y
+        );
+        
+        bottomLabel.point = new paper.Point(
+            rectangle.bounds.center.x,
+            rectangle.bounds.bottom + 20
+        );
+        
+        leftLabel.point = new paper.Point(
+            rectangle.bounds.left - 10,
+            rectangle.bounds.center.y
+        );
+    };
 
         // Update positions when rectangle is resized or rotated
         rectangle.onChange = function() {
