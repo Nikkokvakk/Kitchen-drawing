@@ -13,126 +13,189 @@ document.addEventListener('DOMContentLoaded', function() {
     // Test that Paper.js is working
     console.log('Paper.js initialized');
 
-function createRectangle(width, height) {
-    console.log('Creating rectangle:', width, height);
+    function checkSnap(activeGroup) {
+        const snapThreshold = 20; // Distance in pixels for snapping
+        const activeRect = activeGroup.children[0]; // The rectangle is the first child in group
+        const activeBounds = activeRect.bounds;
 
-    width = Number(width);
-    height = Number(height);
-    
-    if (isNaN(width) || isNaN(height) || width <= 0 || height <= 0) {
-        alert('Vennligst skriv inn gyldige mål');
-        return;
+        // Find all other rectangles
+        paper.project.activeLayer.children.forEach(otherGroup => {
+            if (otherGroup !== activeGroup && otherGroup instanceof paper.Group) {
+                const otherRect = otherGroup.children[0];
+                const otherBounds = otherRect.bounds;
+
+                // Check right to left snapping
+                if (Math.abs(activeBounds.right - otherBounds.left) < snapThreshold &&
+                    activeBounds.top < otherBounds.bottom &&
+                    activeBounds.bottom > otherBounds.top) {
+                    activeGroup.translate(new paper.Point(
+                        otherBounds.left - activeBounds.right,
+                        0
+                    ));
+                }
+
+                // Check left to right snapping
+                if (Math.abs(activeBounds.left - otherBounds.right) < snapThreshold &&
+                    activeBounds.top < otherBounds.bottom &&
+                    activeBounds.bottom > otherBounds.top) {
+                    activeGroup.translate(new paper.Point(
+                        otherBounds.right - activeBounds.left,
+                        0
+                    ));
+                }
+
+                // Check bottom to top snapping
+                if (Math.abs(activeBounds.bottom - otherBounds.top) < snapThreshold &&
+                    activeBounds.left < otherBounds.right &&
+                    activeBounds.right > otherBounds.left) {
+                    activeGroup.translate(new paper.Point(
+                        0,
+                        otherBounds.top - activeBounds.bottom
+                    ));
+                }
+
+                // Check top to bottom snapping
+                if (Math.abs(activeBounds.top - otherBounds.bottom) < snapThreshold &&
+                    activeBounds.left < otherBounds.right &&
+                    activeBounds.right > otherBounds.left) {
+                    activeGroup.translate(new paper.Point(
+                        0,
+                        otherBounds.bottom - activeBounds.top
+                    ));
+                }
+            }
+        });
     }
 
-    const center = paper.view.center;
-    const topLeft = new paper.Point(
-        center.x - width/2,
-        center.y - height/2
-    );
+    function createRectangle(width, height) {
+        console.log('Creating rectangle:', width, height);
 
-    const rectangle = new paper.Path.Rectangle({
-        point: topLeft,
-        size: new paper.Size(width, height),
-        strokeColor: 'black',
-        fillColor: new paper.Color(0, 0.5, 1, 0.3),
-        strokeWidth: 2
-    });
-
-    // Create labels for all four sides
-    const topLabel = new paper.PointText({
-        point: new paper.Point(center.x, center.y - height/2 - 10),
-        content: width + ' mm',
-        justification: 'center',
-        fillColor: 'black',
-        fontSize: 14
-    });
-
-    const rightLabel = new paper.PointText({
-        point: new paper.Point(center.x + width/2 + 10, center.y),
-        content: height + ' mm',
-        justification: 'left',
-        fillColor: 'black',
-        fontSize: 14
-    });
-
-    const bottomLabel = new paper.PointText({
-        point: new paper.Point(center.x, center.y + height/2 + 20),
-        content: width + ' mm',
-        justification: 'center',
-        fillColor: 'black',
-        fontSize: 14
-    });
-
-    const leftLabel = new paper.PointText({
-        point: new paper.Point(center.x - width/2 - 10, center.y),
-        content: height + ' mm',
-        justification: 'right',
-        fillColor: 'black',
-        fontSize: 14
-    });
-
-    // Group rectangle with all labels
-    const group = new paper.Group([rectangle, topLabel, rightLabel, bottomLabel, leftLabel]);
-    
-    // Make the entire group draggable with 1:1 movement
-    group.onMouseDrag = function(event) {
-        // Use direct event delta for 1:1 movement
-        this.translate(event.delta);
+        width = Number(width);
+        height = Number(height);
         
-        // Update all label positions relative to rectangle
-        topLabel.point = new paper.Point(
-            rectangle.bounds.center.x,
-            rectangle.bounds.top - 10
-        );
-        
-        rightLabel.point = new paper.Point(
-            rectangle.bounds.right + 10,
-            rectangle.bounds.center.y
-        );
-        
-        bottomLabel.point = new paper.Point(
-            rectangle.bounds.center.x,
-            rectangle.bounds.bottom + 20
-        );
-        
-        leftLabel.point = new paper.Point(
-            rectangle.bounds.left - 10,
-            rectangle.bounds.center.y
-        );
-    };
+        if (isNaN(width) || isNaN(height) || width <= 0 || height <= 0) {
+            alert('Vennligst skriv inn gyldige mål');
+            return;
+        }
 
-    // Update positions when rectangle is resized or rotated
-    rectangle.onChange = function() {
-        topLabel.point = new paper.Point(
-            this.bounds.center.x,
-            this.bounds.top - 10
+        const center = paper.view.center;
+        const topLeft = new paper.Point(
+            center.x - width/2,
+            center.y - height/2
         );
-        
-        rightLabel.point = new paper.Point(
-            this.bounds.right + 10,
-            this.bounds.center.y
-        );
-        
-        bottomLabel.point = new paper.Point(
-            this.bounds.center.x,
-            this.bounds.bottom + 20
-        );
-        
-        leftLabel.point = new paper.Point(
-            this.bounds.left - 10,
-            this.bounds.center.y
-        );
-    };
 
-    // Ensure we see the new elements
-    paper.view.draw();
-    console.log('Rectangle created');
-}
+        const rectangle = new paper.Path.Rectangle({
+            point: topLeft,
+            size: new paper.Size(width, height),
+            strokeColor: 'black',
+            fillColor: new paper.Color(0, 0.5, 1, 0.3),
+            strokeWidth: 2
+        });
+
+        // Create labels for all four sides
+        const topLabel = new paper.PointText({
+            point: new paper.Point(center.x, center.y - height/2 - 10),
+            content: width + ' mm',
+            justification: 'center',
+            fillColor: 'black',
+            fontSize: 14
+        });
+
+        const rightLabel = new paper.PointText({
+            point: new paper.Point(center.x + width/2 + 10, center.y),
+            content: height + ' mm',
+            justification: 'left',
+            fillColor: 'black',
+            fontSize: 14
+        });
+
+        const bottomLabel = new paper.PointText({
+            point: new paper.Point(center.x, center.y + height/2 + 20),
+            content: width + ' mm',
+            justification: 'center',
+            fillColor: 'black',
+            fontSize: 14
+        });
+
+        const leftLabel = new paper.PointText({
+            point: new paper.Point(center.x - width/2 - 10, center.y),
+            content: height + ' mm',
+            justification: 'right',
+            fillColor: 'black',
+            fontSize: 14
+        });
+
+        // Group rectangle with all labels
+        const group = new paper.Group([rectangle, topLabel, rightLabel, bottomLabel, leftLabel]);
+        
+        // Make the entire group draggable
+        group.onMouseDrag = function(event) {
+            this.translate(event.delta);
+            
+            if (config.snapEnabled) {
+                checkSnap(this);
+            }
+
+            // Update all label positions
+            topLabel.point = new paper.Point(
+                rectangle.bounds.center.x,
+                rectangle.bounds.top - 10
+            );
+            
+            rightLabel.point = new paper.Point(
+                rectangle.bounds.right + 10,
+                rectangle.bounds.center.y
+            );
+            
+            bottomLabel.point = new paper.Point(
+                rectangle.bounds.center.x,
+                rectangle.bounds.bottom + 20
+            );
+            
+            leftLabel.point = new paper.Point(
+                rectangle.bounds.left - 10,
+                rectangle.bounds.center.y
+            );
+        };
+
+        // Update positions when rectangle is resized or rotated
+        rectangle.onChange = function() {
+            topLabel.point = new paper.Point(
+                this.bounds.center.x,
+                this.bounds.top - 10
+            );
+            
+            rightLabel.point = new paper.Point(
+                this.bounds.right + 10,
+                this.bounds.center.y
+            );
+            
+            bottomLabel.point = new paper.Point(
+                this.bounds.center.x,
+                this.bounds.bottom + 20
+            );
+            
+            leftLabel.point = new paper.Point(
+                this.bounds.left - 10,
+                this.bounds.center.y
+            );
+        };
+
+        // Ensure we see the new elements
+        paper.view.draw();
+        console.log('Rectangle created');
+    }
+
     // UI Controls
     document.getElementById('addRect').addEventListener('click', function() {
-        const width = document.getElementById('width').value;
-        const height = document.getElementById('height').value;
-        console.log('Button clicked:', width, height); // Debug log
+        const width = parseFloat(document.getElementById('width').value);
+        const height = parseFloat(document.getElementById('height').value);
+
+        if (isNaN(width) || isNaN(height) || width <= 0 || height <= 0) {
+            alert('Vennligst skriv inn gyldige verdier for bredde og høyde.');
+            return;
+        }
+
         createRectangle(width, height);
     });
 
@@ -144,20 +207,20 @@ function createRectangle(width, height) {
     document.getElementById('toggleMeasure').addEventListener('click', function() {
         config.measureEnabled = !config.measureEnabled;
         this.textContent = config.measureEnabled ? 'Skjul mål' : 'Vis mål';
-        // Update visibility of all measurements
-        paper.project.activeLayer.children.forEach(child => {
-            if (child instanceof paper.Group) {
-                child.children.forEach(item => {
-                    if (item instanceof paper.PointText) {
-                        item.visible = config.measureEnabled;
+        paper.project.activeLayer.children.forEach(group => {
+            if (group instanceof paper.Group) {
+                group.children.forEach(child => {
+                    if (child instanceof paper.PointText) {
+                        child.visible = config.measureEnabled;
                     }
                 });
             }
         });
+        paper.view.draw();
     });
 
     // Handle window resize
-    window.onresize = function() {
+    window.addEventListener('resize', function() {
         paper.view.update();
-    };
+    });
 });
