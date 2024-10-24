@@ -1,4 +1,4 @@
-document.addEventListener('DOMContentLoaded', function() {
+window.onload = function() {
     // Initialize Paper.js
     paper.setup('canvas');
     
@@ -7,7 +7,7 @@ document.addEventListener('DOMContentLoaded', function() {
         snapEnabled: false,
         measureEnabled: true,
         snapThreshold: 20,
-        scale: 1, // 1 pixel = 1mm
+        scale: 1,
         guideLineColors: {
             cornerToCorner: 'red',
             cornerToEdge: 'green',
@@ -76,6 +76,18 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
 
+    function getNearestPointOnLine(p, lineStart, lineEnd) {
+        const line = lineEnd.subtract(lineStart);
+        const len = line.length;
+        const lineNorm = line.divide(len);
+        const projection = p.subtract(lineStart).dot(lineNorm);
+        
+        if (projection <= 0) return lineStart;
+        if (projection >= len) return lineEnd;
+        
+        return lineStart.add(lineNorm.multiply(projection));
+    }
+
     function findSnapPoints(activeGroup, otherGroup) {
         const activeRect = activeGroup.children[0];
         const otherRect = otherGroup.children[0];
@@ -97,7 +109,6 @@ document.addEventListener('DOMContentLoaded', function() {
             otherBounds.bottomRight
         ];
 
-        // Find closest points
         let minDistance = Infinity;
         let closestPoints = null;
         let snapType = null;
@@ -119,7 +130,6 @@ document.addEventListener('DOMContentLoaded', function() {
 
         // If no corner-to-corner found, check corner-to-edge
         if (!closestPoints) {
-// Check corners against edges
             const otherEdges = [
                 { start: otherBounds.topLeft, end: otherBounds.topRight },
                 { start: otherBounds.topRight, end: otherBounds.bottomRight },
@@ -143,57 +153,12 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         }
 
-        // If no corner snaps found, check edge-to-edge
-        if (!closestPoints) {
-            const activeEdges = [
-                { start: activeBounds.topLeft, end: activeBounds.topRight },
-                { start: activeBounds.topRight, end: activeBounds.bottomRight },
-                { start: activeBounds.bottomRight, end: activeBounds.bottomLeft },
-                { start: activeBounds.bottomLeft, end: activeBounds.topLeft }
-            ];
-
-            const otherEdges = [
-                { start: otherBounds.topLeft, end: otherBounds.topRight },
-                { start: otherBounds.topRight, end: otherBounds.bottomRight },
-                { start: otherBounds.bottomRight, end: otherBounds.bottomLeft },
-                { start: otherBounds.bottomLeft, end: otherBounds.topLeft }
-            ];
-
-            for (let activeEdge of activeEdges) {
-                for (let otherEdge of otherEdges) {
-                    const point1 = getNearestPointOnLine(activeEdge.start, otherEdge.start, otherEdge.end);
-                    const point2 = getNearestPointOnLine(activeEdge.end, otherEdge.start, otherEdge.end);
-                    const distance1 = activeEdge.start.getDistance(point1);
-                    const distance2 = activeEdge.end.getDistance(point2);
-                    
-                    if (Math.min(distance1, distance2) < minDistance && Math.min(distance1, distance2) < config.snapThreshold) {
-                        minDistance = Math.min(distance1, distance2);
-                        closestPoints = {
-                            from: distance1 < distance2 ? activeEdge.start : activeEdge.end,
-                            to: distance1 < distance2 ? point1 : point2
-                        };
-                        snapType = 'edgeToEdge';
-                    }
-                }
-            }
-        }
-
         return { points: closestPoints, type: snapType, distance: minDistance };
     }
 
-    function getNearestPointOnLine(p, lineStart, lineEnd) {
-        const line = lineEnd.subtract(lineStart);
-        const len = line.length;
-        const lineNorm = line.divide(len);
-        const projection = p.subtract(lineStart).dot(lineNorm);
-        
-        if (projection <= 0) return lineStart;
-        if (projection >= len) return lineEnd;
-        
-        return lineStart.add(lineNorm.multiply(projection));
-    }
+    function createRectangle(width, height) {
+        console.log('Creating rectangle:', width, height); // Debug log
 
-function createRectangle(width, height) {
         const center = paper.view.center;
         const topLeft = new paper.Point(
             center.x - width/2,
@@ -325,11 +290,12 @@ function createRectangle(width, height) {
             leftLabel.visible = config.measureEnabled;
         }
 
-        layer.add(group);
+        paper.project.activeLayer.addChild(group);
+        paper.view.draw();
         return group;
     }
 
-// UI Controls
+    // UI Controls
     document.getElementById('createRect').addEventListener('click', function() {
         const width = parseFloat(document.getElementById('width').value);
         const height = parseFloat(document.getElementById('height').value);
@@ -368,8 +334,4 @@ function createRectangle(width, height) {
     window.addEventListener('resize', function() {
         paper.view.update();
     });
-
-    // Initialize the view
-    const layer = new paper.Layer();
-    paper.view.draw();
-});
+};
