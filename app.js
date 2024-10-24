@@ -2,135 +2,198 @@ document.addEventListener('DOMContentLoaded', function() {
     // Initialize Paper.js
     paper.setup('canvas');
     
-    // Set up some default values
+    // Configuration
     const config = {
         snapEnabled: false,
         measureEnabled: true,
-        snapDistance: 20,
-        scale: 1
+        snapThreshold: 20,
+        scale: 1, // 1 pixel = 1mm
+        guideLineColors: {
+            cornerToCorner: 'red',
+            cornerToEdge: 'green',
+            edgeToEdge: 'black'
+        }
     };
 
-    // Test that Paper.js is working
-    console.log('Paper.js initialized');
+    // Guide line and measurement display
+    let guideLine = null;
+    let guideText = null;
+    let snapPoints = null;
 
-function checkSnap(activeGroup) {
-    const snapThreshold = 10; // Distance for snap detection
-    const cornerSnapThreshold = 15; // Slightly larger threshold for corner snapping
-    const activeRect = activeGroup.children[0];
-    const activeBounds = activeRect.bounds;
-    let wasSnapped = false; // Track if snapping occurred
+    function createGuideLine(start, end, type) {
+        // Remove existing guide elements
+        if (guideLine) guideLine.remove();
+        if (guideText) guideText.remove();
 
-    paper.project.activeLayer.children.forEach(otherGroup => {
-        if (otherGroup !== activeGroup && otherGroup instanceof paper.Group) {
-            const otherRect = otherGroup.children[0];
-            const otherBounds = otherRect.bounds;
+        // Create new guide line
+        guideLine = new paper.Path.Line({
+            from: start,
+            to: end,
+            strokeColor: config.guideLineColors[type],
+            strokeWidth: 1,
+            dashArray: null
+        });
 
-            // Store original position before any snapping
-            const originalPosition = activeGroup.position.clone();
-            
-            // Check corners first
-            const corners = [
-                { active: { x: activeBounds.left, y: activeBounds.top }, 
-                  other: { x: otherBounds.right, y: otherBounds.bottom } },
-                { active: { x: activeBounds.right, y: activeBounds.top }, 
-                  other: { x: otherBounds.left, y: otherBounds.bottom } },
-                { active: { x: activeBounds.left, y: activeBounds.bottom }, 
-                  other: { x: otherBounds.right, y: otherBounds.top } },
-                { active: { x: activeBounds.right, y: activeBounds.bottom }, 
-                  other: { x: otherBounds.left, y: otherBounds.top } }
+        // Calculate distance
+        const distance = start.getDistance(end);
+        const roundedDistance = Math.round(distance);
+
+        // Create text with background
+        const midPoint = start.add(end).divide(2);
+        const background = new paper.Path.Rectangle({
+            center: midPoint,
+            size: [55, 20],
+            fillColor: 'white',
+            opacity: 0.8
+        });
+
+        guideText = new paper.PointText({
+            point: midPoint,
+            content: `${roundedDistance} mm`,
+            fillColor: 'black',
+            fontSize: 12,
+            justification: 'center'
+        });
+
+        // Center the text vertically
+        guideText.position = midPoint;
+        background.position = guideText.position;
+
+        // Group text and background
+        guideText = new paper.Group([background, guideText]);
+        
+        return { line: guideLine, text: guideText };
+    }
+
+    function removeGuideElements() {
+        if (guideLine) {
+            guideLine.remove();
+            guideLine = null;
+        }
+        if (guideText) {
+            guideText.remove();
+            guideText = null;
+        }
+    }
+
+    function findSnapPoints(activeGroup, otherGroup) {
+        const activeRect = activeGroup.children[0];
+        const otherRect = otherGroup.children[0];
+        const activeBounds = activeRect.bounds;
+        const otherBounds = otherRect.bounds;
+
+        // Get corners of both rectangles
+        const activeCorners = [
+            activeBounds.topLeft,
+            activeBounds.topRight,
+            activeBounds.bottomLeft,
+            activeBounds.bottomRight
+        ];
+
+        const otherCorners = [
+            otherBounds.topLeft,
+            otherBounds.topRight,
+            otherBounds.bottomLeft,
+            otherBounds.bottomRight
+        ];
+
+        // Find closest points
+        let minDistance = Infinity;
+        let closestPoints = null;
+        let snapType = null;
+
+        // Check corner-to-corner
+        for (let activeCorner of activeCorners) {
+            for (let otherCorner of otherCorners) {
+                const distance = activeCorner.getDistance(otherCorner);
+                if (distance < minDistance && distance < config.snapThreshold) {
+                    minDistance = distance;
+                    closestPoints = {
+                        from: activeCorner,
+                        to: otherCorner
+                    };
+                    snapType = 'cornerToCorner';
+                }
+            }
+        }
+
+        // If no corner-to-corner found, check corner-to-edge
+        if (!closestPoints) {
+// Check corners against edges
+            const otherEdges = [
+                { start: otherBounds.topLeft, end: otherBounds.topRight },
+                { start: otherBounds.topRight, end: otherBounds.bottomRight },
+                { start: otherBounds.bottomRight, end: otherBounds.bottomLeft },
+                { start: otherBounds.bottomLeft, end: otherBounds.topLeft }
             ];
 
-            // Check each corner
-            for (let corner of corners) {
-                const distance = Math.sqrt(
-                    Math.pow(corner.active.x - corner.other.x, 2) + 
-                    Math.pow(corner.active.y - corner.other.y, 2)
-                );
-
-                if (distance < cornerSnapThreshold) {
-                    activeGroup.translate(new paper.Point(
-                        corner.other.x - corner.active.x,
-                        corner.other.y - corner.active.y
-                    ));
-                    wasSnapped = true;
-                    return; // Exit after corner snap
+            for (let activeCorner of activeCorners) {
+                for (let edge of otherEdges) {
+                    const nearestPoint = getNearestPointOnLine(activeCorner, edge.start, edge.end);
+                    const distance = activeCorner.getDistance(nearestPoint);
+                    if (distance < minDistance && distance < config.snapThreshold) {
+                        minDistance = distance;
+                        closestPoints = {
+                            from: activeCorner,
+                            to: nearestPoint
+                        };
+                        snapType = 'cornerToEdge';
+                    }
                 }
-            }
-
-            // If no corner snap, check edges
-            if (!wasSnapped) {
-                // Right to left
-                if (Math.abs(activeBounds.right - otherBounds.left) < snapThreshold &&
-                    activeBounds.top < otherBounds.bottom &&
-                    activeBounds.bottom > otherBounds.top) {
-                    activeGroup.translate(new paper.Point(
-                        otherBounds.left - activeBounds.right,
-                        0
-                    ));
-                    wasSnapped = true;
-                }
-
-                // Left to right
-                if (Math.abs(activeBounds.left - otherBounds.right) < snapThreshold &&
-                    activeBounds.top < otherBounds.bottom &&
-                    activeBounds.bottom > otherBounds.top) {
-                    activeGroup.translate(new paper.Point(
-                        otherBounds.right - activeBounds.left,
-                        0
-                    ));
-                    wasSnapped = true;
-                }
-
-                // Bottom to top
-                if (Math.abs(activeBounds.bottom - otherBounds.top) < snapThreshold &&
-                    activeBounds.left < otherBounds.right &&
-                    activeBounds.right > otherBounds.left) {
-                    activeGroup.translate(new paper.Point(
-                        0,
-                        otherBounds.top - activeBounds.bottom
-                    ));
-                    wasSnapped = true;
-                }
-
-                // Top to bottom
-                if (Math.abs(activeBounds.top - otherBounds.bottom) < snapThreshold &&
-                    activeBounds.left < otherBounds.right &&
-                    activeBounds.right > otherBounds.left) {
-                    activeGroup.translate(new paper.Point(
-                        0,
-                        otherBounds.bottom - activeBounds.top
-                    ));
-                    wasSnapped = true;
-                }
-            }
-
-            // If we moved too fast and are now beyond threshold, cancel snap
-            const currentPosition = activeGroup.position;
-            const moveDistance = Math.sqrt(
-                Math.pow(currentPosition.x - originalPosition.x, 2) +
-                Math.pow(currentPosition.y - originalPosition.y, 2)
-            );
-
-            if (moveDistance > snapThreshold * 1.5) {
-                activeGroup.position = originalPosition;
-                wasSnapped = false;
             }
         }
-    });
 
-    return wasSnapped;
-}
-    function createRectangle(width, height) {
-        console.log('Creating rectangle:', width, height);
+        // If no corner snaps found, check edge-to-edge
+        if (!closestPoints) {
+            const activeEdges = [
+                { start: activeBounds.topLeft, end: activeBounds.topRight },
+                { start: activeBounds.topRight, end: activeBounds.bottomRight },
+                { start: activeBounds.bottomRight, end: activeBounds.bottomLeft },
+                { start: activeBounds.bottomLeft, end: activeBounds.topLeft }
+            ];
 
-        width = Number(width);
-        height = Number(height);
+            const otherEdges = [
+                { start: otherBounds.topLeft, end: otherBounds.topRight },
+                { start: otherBounds.topRight, end: otherBounds.bottomRight },
+                { start: otherBounds.bottomRight, end: otherBounds.bottomLeft },
+                { start: otherBounds.bottomLeft, end: otherBounds.topLeft }
+            ];
+
+            for (let activeEdge of activeEdges) {
+                for (let otherEdge of otherEdges) {
+                    const point1 = getNearestPointOnLine(activeEdge.start, otherEdge.start, otherEdge.end);
+                    const point2 = getNearestPointOnLine(activeEdge.end, otherEdge.start, otherEdge.end);
+                    const distance1 = activeEdge.start.getDistance(point1);
+                    const distance2 = activeEdge.end.getDistance(point2);
+                    
+                    if (Math.min(distance1, distance2) < minDistance && Math.min(distance1, distance2) < config.snapThreshold) {
+                        minDistance = Math.min(distance1, distance2);
+                        closestPoints = {
+                            from: distance1 < distance2 ? activeEdge.start : activeEdge.end,
+                            to: distance1 < distance2 ? point1 : point2
+                        };
+                        snapType = 'edgeToEdge';
+                    }
+                }
+            }
+        }
+
+        return { points: closestPoints, type: snapType, distance: minDistance };
+    }
+
+    function getNearestPointOnLine(p, lineStart, lineEnd) {
+        const line = lineEnd.subtract(lineStart);
+        const len = line.length;
+        const lineNorm = line.divide(len);
+        const projection = p.subtract(lineStart).dot(lineNorm);
         
-        if (isNaN(width) || isNaN(height) || width <= 0 || height <= 0) {
-            alert('Vennligst skriv inn gyldige mål');
-            return;
-        }
+        if (projection <= 0) return lineStart;
+        if (projection >= len) return lineEnd;
+        
+        return lineStart.add(lineNorm.multiply(projection));
+    }
 
+function createRectangle(width, height) {
         const center = paper.view.center;
         const topLeft = new paper.Point(
             center.x - width/2,
@@ -142,7 +205,8 @@ function checkSnap(activeGroup) {
             size: new paper.Size(width, height),
             strokeColor: 'black',
             fillColor: new paper.Color(0, 0.5, 1, 0.3),
-            strokeWidth: 2
+            strokeWidth: 2,
+            strokeScaleEnabled: false
         });
 
         // Create labels for all four sides
@@ -181,76 +245,97 @@ function checkSnap(activeGroup) {
         // Group rectangle with all labels
         const group = new paper.Group([rectangle, topLabel, rightLabel, bottomLabel, leftLabel]);
         
-        // Make the entire group draggable
-group.onMouseDrag = function(event) {
-        const prevPosition = this.position.clone();
-        this.translate(event.delta);
+        // Store original position for potential snap cancellation
+        let originalPosition = null;
+        let potentialSnap = null;
+
+        group.onMouseDown = function(event) {
+            originalPosition = this.position.clone();
+            removeGuideElements();
+        };
         
-        if (config.snapEnabled) {
-            const wasSnapped = checkSnap(this);
-            // If we're moving fast enough, break out of snap
-            if (wasSnapped && event.delta.length > config.snapDistance * 1.5) {
-                this.position = prevPosition.add(event.delta);
+        group.onMouseDrag = function(event) {
+            this.translate(event.delta);
+            updateLabels(this);
+
+            if (config.snapEnabled) {
+                // Check for potential snap points with other rectangles
+                let closestSnap = null;
+                paper.project.activeLayer.children.forEach(otherGroup => {
+                    if (otherGroup !== this && otherGroup instanceof paper.Group) {
+                        const snapResult = findSnapPoints(this, otherGroup);
+                        if (snapResult.points && (!closestSnap || snapResult.distance < closestSnap.distance)) {
+                            closestSnap = snapResult;
+                        }
+                    }
+                });
+
+                // Update guide line if snap points found
+                if (closestSnap && closestSnap.points) {
+                    createGuideLine(closestSnap.points.from, closestSnap.points.to, closestSnap.type);
+                    potentialSnap = closestSnap;
+                } else {
+                    removeGuideElements();
+                    potentialSnap = null;
+                }
             }
-        }
+        };
 
-        // Update all label positions
-        topLabel.point = new paper.Point(
-            rectangle.bounds.center.x,
-            rectangle.bounds.top - 10
-        );
-        
-        rightLabel.point = new paper.Point(
-            rectangle.bounds.right + 10,
-            rectangle.bounds.center.y
-        );
-        
-        bottomLabel.point = new paper.Point(
-            rectangle.bounds.center.x,
-            rectangle.bounds.bottom + 20
-        );
-        
-        leftLabel.point = new paper.Point(
-            rectangle.bounds.left - 10,
-            rectangle.bounds.center.y
-        );
-    };
+        group.onMouseUp = function(event) {
+            if (config.snapEnabled && potentialSnap && potentialSnap.points) {
+                const confirmed = confirm("Snap together?");
+                if (confirmed) {
+                    // Calculate and apply the snap translation
+                    const translation = potentialSnap.points.to.subtract(potentialSnap.points.from);
+                    this.translate(translation);
+                    updateLabels(this);
+                }
+                removeGuideElements();
+                potentialSnap = null;
+            }
+        };
 
-        // Update positions when rectangle is resized or rotated
-        rectangle.onChange = function() {
+        function updateLabels(group) {
+            const rect = group.children[0];
+            const [topLabel, rightLabel, bottomLabel, leftLabel] = group.children.slice(1);
+
             topLabel.point = new paper.Point(
-                this.bounds.center.x,
-                this.bounds.top - 10
+                rect.bounds.center.x,
+                rect.bounds.top - 10
             );
             
             rightLabel.point = new paper.Point(
-                this.bounds.right + 10,
-                this.bounds.center.y
+                rect.bounds.right + 10,
+                rect.bounds.center.y
             );
             
             bottomLabel.point = new paper.Point(
-                this.bounds.center.x,
-                this.bounds.bottom + 20
+                rect.bounds.center.x,
+                rect.bounds.bottom + 20
             );
             
             leftLabel.point = new paper.Point(
-                this.bounds.left - 10,
-                this.bounds.center.y
+                rect.bounds.left - 10,
+                rect.bounds.center.y
             );
-        };
 
-        // Ensure we see the new elements
-        paper.view.draw();
-        console.log('Rectangle created');
+            topLabel.visible = config.measureEnabled;
+            rightLabel.visible = config.measureEnabled;
+            bottomLabel.visible = config.measureEnabled;
+            leftLabel.visible = config.measureEnabled;
+        }
+
+        layer.add(group);
+        return group;
     }
 
-    // UI Controls
-    document.getElementById('addRect').addEventListener('click', function() {
+// UI Controls
+    document.getElementById('createRect').addEventListener('click', function() {
         const width = parseFloat(document.getElementById('width').value);
         const height = parseFloat(document.getElementById('height').value);
 
         if (isNaN(width) || isNaN(height) || width <= 0 || height <= 0) {
-            alert('Vennligst skriv inn gyldige verdier for bredde og høyde.');
+            alert('Please enter valid dimensions.');
             return;
         }
 
@@ -259,19 +344,21 @@ group.onMouseDrag = function(event) {
 
     document.getElementById('toggleSnap').addEventListener('click', function() {
         config.snapEnabled = !config.snapEnabled;
-        this.textContent = config.snapEnabled ? 'Slå av snap' : 'Slå på snap';
+        this.textContent = config.snapEnabled ? 'Disable Snap' : 'Enable Snap';
+        removeGuideElements();
     });
 
     document.getElementById('toggleMeasure').addEventListener('click', function() {
         config.measureEnabled = !config.measureEnabled;
-        this.textContent = config.measureEnabled ? 'Skjul mål' : 'Vis mål';
+        this.textContent = config.measureEnabled ? 'Hide Measurements' : 'Show Measurements';
+        
         paper.project.activeLayer.children.forEach(group => {
             if (group instanceof paper.Group) {
-                group.children.forEach(child => {
-                    if (child instanceof paper.PointText) {
-                        child.visible = config.measureEnabled;
+                for (let i = 1; i < group.children.length; i++) {
+                    if (group.children[i] instanceof paper.PointText) {
+                        group.children[i].visible = config.measureEnabled;
                     }
-                });
+                }
             }
         });
         paper.view.draw();
@@ -281,4 +368,8 @@ group.onMouseDrag = function(event) {
     window.addEventListener('resize', function() {
         paper.view.update();
     });
+
+    // Initialize the view
+    const layer = new paper.Layer();
+    paper.view.draw();
 });
