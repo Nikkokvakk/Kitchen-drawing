@@ -13,60 +13,109 @@ document.addEventListener('DOMContentLoaded', function() {
     // Test that Paper.js is working
     console.log('Paper.js initialized');
 
-    function checkSnap(activeGroup) {
-        const snapThreshold = 20; // Distance in pixels for snapping
-        const activeRect = activeGroup.children[0]; // The rectangle is the first child in group
-        const activeBounds = activeRect.bounds;
+  function checkSnap(activeGroup) {
+    const snapThreshold = 10; // Reduced from 20 to 10 pixels
+    const alignmentThreshold = 10; // Threshold for edge alignment
+    const activeRect = activeGroup.children[0];
+    const activeBounds = activeRect.bounds;
 
-        // Find all other rectangles
-        paper.project.activeLayer.children.forEach(otherGroup => {
-            if (otherGroup !== activeGroup && otherGroup instanceof paper.Group) {
-                const otherRect = otherGroup.children[0];
-                const otherBounds = otherRect.bounds;
+    paper.project.activeLayer.children.forEach(otherGroup => {
+        if (otherGroup !== activeGroup && otherGroup instanceof paper.Group) {
+            const otherRect = otherGroup.children[0];
+            const otherBounds = otherRect.bounds;
 
-                // Check right to left snapping
-                if (Math.abs(activeBounds.right - otherBounds.left) < snapThreshold &&
-                    activeBounds.top < otherBounds.bottom &&
-                    activeBounds.bottom > otherBounds.top) {
-                    activeGroup.translate(new paper.Point(
-                        otherBounds.left - activeBounds.right,
-                        0
-                    ));
-                }
-
-                // Check left to right snapping
-                if (Math.abs(activeBounds.left - otherBounds.right) < snapThreshold &&
-                    activeBounds.top < otherBounds.bottom &&
-                    activeBounds.bottom > otherBounds.top) {
-                    activeGroup.translate(new paper.Point(
-                        otherBounds.right - activeBounds.left,
-                        0
-                    ));
-                }
-
-                // Check bottom to top snapping
-                if (Math.abs(activeBounds.bottom - otherBounds.top) < snapThreshold &&
-                    activeBounds.left < otherBounds.right &&
-                    activeBounds.right > otherBounds.left) {
-                    activeGroup.translate(new paper.Point(
-                        0,
-                        otherBounds.top - activeBounds.bottom
-                    ));
-                }
-
-                // Check top to bottom snapping
-                if (Math.abs(activeBounds.top - otherBounds.bottom) < snapThreshold &&
-                    activeBounds.left < otherBounds.right &&
-                    activeBounds.right > otherBounds.left) {
-                    activeGroup.translate(new paper.Point(
-                        0,
-                        otherBounds.bottom - activeBounds.top
-                    ));
+            // Edge snapping (existing logic)
+            // Right to left
+            if (Math.abs(activeBounds.right - otherBounds.left) < snapThreshold &&
+                activeBounds.top < otherBounds.bottom &&
+                activeBounds.bottom > otherBounds.top) {
+                activeGroup.translate(new paper.Point(
+                    otherBounds.left - activeBounds.right,
+                    0
+                ));
+                
+                // Align to top or bottom edge if close
+                if (Math.abs(activeBounds.top - otherBounds.top) < alignmentThreshold) {
+                    activeGroup.translate(new paper.Point(0, otherBounds.top - activeBounds.top));
+                } else if (Math.abs(activeBounds.bottom - otherBounds.bottom) < alignmentThreshold) {
+                    activeGroup.translate(new paper.Point(0, otherBounds.bottom - activeBounds.bottom));
                 }
             }
-        });
-    }
 
+            // Left to right
+            if (Math.abs(activeBounds.left - otherBounds.right) < snapThreshold &&
+                activeBounds.top < otherBounds.bottom &&
+                activeBounds.bottom > otherBounds.top) {
+                activeGroup.translate(new paper.Point(
+                    otherBounds.right - activeBounds.left,
+                    0
+                ));
+                
+                // Align to top or bottom edge if close
+                if (Math.abs(activeBounds.top - otherBounds.top) < alignmentThreshold) {
+                    activeGroup.translate(new paper.Point(0, otherBounds.top - activeBounds.top));
+                } else if (Math.abs(activeBounds.bottom - otherBounds.bottom) < alignmentThreshold) {
+                    activeGroup.translate(new paper.Point(0, otherBounds.bottom - activeBounds.bottom));
+                }
+            }
+
+            // Bottom to top
+            if (Math.abs(activeBounds.bottom - otherBounds.top) < snapThreshold &&
+                activeBounds.left < otherBounds.right &&
+                activeBounds.right > otherBounds.left) {
+                activeGroup.translate(new paper.Point(
+                    0,
+                    otherBounds.top - activeBounds.bottom
+                ));
+                
+                // Align to left or right edge if close
+                if (Math.abs(activeBounds.left - otherBounds.left) < alignmentThreshold) {
+                    activeGroup.translate(new paper.Point(otherBounds.left - activeBounds.left, 0));
+                } else if (Math.abs(activeBounds.right - otherBounds.right) < alignmentThreshold) {
+                    activeGroup.translate(new paper.Point(otherBounds.right - activeBounds.right, 0));
+                }
+            }
+
+            // Top to bottom
+            if (Math.abs(activeBounds.top - otherBounds.bottom) < snapThreshold &&
+                activeBounds.left < otherBounds.right &&
+                activeBounds.right > otherBounds.left) {
+                activeGroup.translate(new paper.Point(
+                    0,
+                    otherBounds.bottom - activeBounds.top
+                ));
+                
+                // Align to left or right edge if close
+                if (Math.abs(activeBounds.left - otherBounds.left) < alignmentThreshold) {
+                    activeGroup.translate(new paper.Point(otherBounds.left - activeBounds.left, 0));
+                } else if (Math.abs(activeBounds.right - otherBounds.right) < alignmentThreshold) {
+                    activeGroup.translate(new paper.Point(otherBounds.right - activeBounds.right, 0));
+                }
+            }
+
+            // Center alignment snapping (when edges are already aligned)
+            if (Math.abs(activeBounds.left - otherBounds.left) < snapThreshold ||
+                Math.abs(activeBounds.right - otherBounds.right) < snapThreshold) {
+                // Vertical center alignment
+                if (Math.abs((activeBounds.top + activeBounds.bottom)/2 - 
+                           (otherBounds.top + otherBounds.bottom)/2) < alignmentThreshold) {
+                    activeGroup.translate(new paper.Point(0, 
+                        (otherBounds.top + otherBounds.bottom)/2 - (activeBounds.top + activeBounds.bottom)/2));
+                }
+            }
+
+            if (Math.abs(activeBounds.top - otherBounds.top) < snapThreshold ||
+                Math.abs(activeBounds.bottom - otherBounds.bottom) < snapThreshold) {
+                // Horizontal center alignment
+                if (Math.abs((activeBounds.left + activeBounds.right)/2 - 
+                           (otherBounds.left + otherBounds.right)/2) < alignmentThreshold) {
+                    activeGroup.translate(new paper.Point(
+                        (otherBounds.left + otherBounds.right)/2 - (activeBounds.left + activeBounds.right)/2, 0));
+                }
+            }
+        }
+    });
+}
     function createRectangle(width, height) {
         console.log('Creating rectangle:', width, height);
 
