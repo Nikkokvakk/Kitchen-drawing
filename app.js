@@ -7,8 +7,29 @@ window.onload = function() {
         snapEnabled: false,
         measureEnabled: true,
         snapThreshold: 25,
-        scale: 1
+        scale: 1,
+        defaultWidth: 4000, // Default visible width in mm
+        minZoom: 0.25,
+        maxZoom: 4
     };
+
+    let initialZoom = null;
+    let lastPinchDistance = null;
+
+    // Initialize zoom based on default visible width
+    function initializeZoom() {
+        const viewWidth = paper.view.viewSize.width;
+        initialZoom = viewWidth / config.defaultWidth;
+        paper.view.zoom = initialZoom;
+        paper.view.center = new paper.Point(0, 0);
+        updateWidthDisplay();
+    }
+
+    function updateWidthDisplay() {
+        const visibleWidth = Math.round(paper.view.viewSize.width / paper.view.zoom);
+        document.getElementById('visibleWidth').textContent = `Width visible: ${visibleWidth} mm`;
+        document.getElementById('zoomSlider').value = (paper.view.zoom / initialZoom) * 100;
+    }
 
     // Guide line
     let guideLine = null;
@@ -39,7 +60,6 @@ window.onload = function() {
         const activeBounds = activeRect.bounds;
         const otherBounds = otherRect.bounds;
 
-        // Get corners
         const activeCorners = [
             activeBounds.topLeft,
             activeBounds.topRight,
@@ -54,7 +74,6 @@ window.onload = function() {
             otherBounds.bottomRight
         ];
 
-        // Find closest corner pair
         let minDistance = Infinity;
         let closestPoints = null;
 
@@ -196,7 +215,86 @@ window.onload = function() {
         return group;
     }
 
-    // UI Controls
+    // Zoom Controls
+    const zoomSlider = document.getElementById('zoomSlider');
+    zoomSlider.addEventListener('input', function(e) {
+        if (initialZoom) {
+            const newZoom = (this.value / 100) * initialZoom;
+            const viewCenter = paper.view.center;
+            paper.view.zoom = newZoom;
+            paper.view.center = viewCenter;
+        }
+    });
+
+    zoomSlider.addEventListener('change', function() {
+        updateWidthDisplay();
+    });
+
+    document.getElementById('resetView').addEventListener('click', function() {
+        initializeZoom();
+    });
+
+    document.getElementById('zoomFit').addEventListener('click', function() {
+        if (paper.project.activeLayer.children.length === 0) return;
+        
+        const bounds = paper.project.activeLayer.bounds;
+        const padding = 50; // pixels of padding around content
+        
+        const scale = Math.min(
+            (paper.view.viewSize.width - padding * 2) / bounds.width,
+            (paper.view.viewSize.height - padding * 2) / bounds.height
+        );
+        
+        paper.view.scale(scale);
+        paper.view.center = bounds.center;
+        updateWidthDisplay();
+    });
+
+    // Pinch-zoom handling
+    paper.view.element.addEventListener('touchstart', function(event) {
+        if (event.touches.length === 2) {
+            lastPinchDistance = getPinchDistance(event);
+        }
+    }, false);
+
+    paper.view.element.addEventListener('touchmove', function(event) {
+        if (event.touches.length === 2) {
+            event.preventDefault();
+            const pinchDistance = getPinchDistance(event);
+            
+            if (lastPinchDistance) {
+                const pinchScale = pinchDistance / lastPinchDistance;
+                const viewCenter = paper.view.center;
+                const pinchCenter = new paper.Point(
+                    (event.touches[0].clientX + event.touches[1].clientX) / 2,
+                    (event.touches[0].clientY + event.touches[1].clientY) / 2
+                );
+                
+                const newZoom = paper.view.zoom * pinchScale;
+                if (newZoom >= config.minZoom * initialZoom && newZoom <= config.maxZoom * initialZoom) {
+                    paper.view.zoom = newZoom;
+                    paper.view.center = viewCenter;
+                }
+            }
+            lastPinchDistance = pinchDistance;
+        }
+    }, false);
+
+    paper.view.element.addEventListener('touchend', function() {
+        lastPinchDistance = null;
+        updateWidthDisplay();
+    }, false);
+
+    function getPinchDistance(event) {
+        const touch1 = event.touches[0];
+        const touch2 = event.touches[1];
+        return Math.sqrt(
+            Math.pow(touch2.clientX - touch1.clientX, 2) +
+            Math.pow(touch2.clientY - touch1.clientY, 2)
+        );
+    }
+
+    // Existing UI Controls
     document.getElementById('createRect').addEventListener('click', function() {
         const width = parseFloat(document.getElementById('width').value);
         const height = parseFloat(document.getElementById('height').value);
@@ -231,7 +329,12 @@ window.onload = function() {
         paper.view.draw();
     });
 
+    // Handle window resize
     window.addEventListener('resize', function() {
         paper.view.update();
+        updateWidthDisplay();
     });
+
+    // Initialize zoom on startup
+    initializeZoom();
 };
