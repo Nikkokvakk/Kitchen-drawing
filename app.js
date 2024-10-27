@@ -6,39 +6,34 @@ window.onload = function() {
     const config = {
         snapEnabled: false,
         measureEnabled: true,
-        snapThreshold: 50, // Increased to 50px
-        scale: 1,
-        guideLineColors: {
-            cornerToCorner: 'red',
-            cornerToEdge: 'green',
-            edgeToEdge: 'black'
-        }
+        snapThreshold: 25,
+        scale: 1
     };
 
-    // Guide lines array to store multiple lines
-    let guideLines = [];
-    let currentSnaps = [];
+    // Guide line
+    let guideLine = null;
+    let currentSnapPoints = null;
 
-    function clearGuideLines() {
-        guideLines.forEach(line => line.remove());
-        guideLines = [];
-        currentSnaps = [];
+    function clearGuideLine() {
+        if (guideLine) {
+            guideLine.remove();
+            guideLine = null;
+        }
+        currentSnapPoints = null;
     }
 
-    function createGuideLine(start, end, type) {
-        const line = new paper.Path.Line({
+    function createGuideLine(start, end) {
+        clearGuideLine();
+        guideLine = new paper.Path.Line({
             from: start,
             to: end,
-            strokeColor: config.guideLineColors[type],
-            strokeWidth: 2,
-            strokeCap: 'round'
+            strokeColor: 'red',
+            strokeWidth: 2
         });
-        guideLines.push(line);
-        return line;
+        return guideLine;
     }
 
-    function findAllSnapPoints(activeGroup, otherGroup) {
-        const snapPoints = [];
+    function findClosestCorners(activeGroup, otherGroup) {
         const activeRect = activeGroup.children[0];
         const otherRect = otherGroup.children[0];
         const activeBounds = activeRect.bounds;
@@ -46,138 +41,39 @@ window.onload = function() {
 
         // Get corners
         const activeCorners = [
-            { point: activeBounds.topLeft, name: 'topLeft' },
-            { point: activeBounds.topRight, name: 'topRight' },
-            { point: activeBounds.bottomLeft, name: 'bottomLeft' },
-            { point: activeBounds.bottomRight, name: 'bottomRight' }
+            activeBounds.topLeft,
+            activeBounds.topRight,
+            activeBounds.bottomLeft,
+            activeBounds.bottomRight
         ];
 
         const otherCorners = [
-            { point: otherBounds.topLeft, name: 'topLeft' },
-            { point: otherBounds.topRight, name: 'topRight' },
-            { point: otherBounds.bottomLeft, name: 'bottomLeft' },
-            { point: otherBounds.bottomRight, name: 'bottomRight' }
+            otherBounds.topLeft,
+            otherBounds.topRight,
+            otherBounds.bottomLeft,
+            otherBounds.bottomRight
         ];
 
-        // Corner to Corner snaps
+        // Find closest corner pair
+        let minDistance = Infinity;
+        let closestPoints = null;
+
         for (let activeCorner of activeCorners) {
             for (let otherCorner of otherCorners) {
-                const distance = activeCorner.point.getDistance(otherCorner.point);
-                if (distance < config.snapThreshold) {
-                    snapPoints.push({
-                        type: 'cornerToCorner',
-                        from: activeCorner.point,
-                        to: otherCorner.point,
+                const distance = activeCorner.getDistance(otherCorner);
+                if (distance < minDistance) {
+                    minDistance = distance;
+                    closestPoints = {
+                        from: activeCorner,
+                        to: otherCorner,
                         distance: distance,
-                        translation: otherCorner.point.subtract(activeCorner.point)
-                    });
+                        translation: otherCorner.subtract(activeCorner)
+                    };
                 }
             }
         }
 
-        // Corner to Edge snaps
-        const otherEdges = [
-            { start: otherBounds.topLeft, end: otherBounds.topRight, name: 'top' },
-            { start: otherBounds.topRight, end: otherBounds.bottomRight, name: 'right' },
-            { start: otherBounds.bottomRight, end: otherBounds.bottomLeft, name: 'bottom' },
-            { start: otherBounds.bottomLeft, end: otherBounds.topLeft, name: 'left' }
-        ];
-
-        for (let activeCorner of activeCorners) {
-            for (let edge of otherEdges) {
-                const nearestPoint = getNearestPointOnLine(activeCorner.point, edge.start, edge.end);
-                const distance = activeCorner.point.getDistance(nearestPoint);
-                if (distance < config.snapThreshold) {
-                    snapPoints.push({
-                        type: 'cornerToEdge',
-                        from: activeCorner.point,
-                        to: nearestPoint,
-                        distance: distance,
-                        translation: nearestPoint.subtract(activeCorner.point)
-                    });
-                }
-            }
-        }
-
-        // Edge to Edge snaps
-        const activeEdges = [
-            { start: activeBounds.topLeft, end: activeBounds.topRight, name: 'top' },
-            { start: activeBounds.topRight, end: activeBounds.bottomRight, name: 'right' },
-            { start: activeBounds.bottomRight, end: activeBounds.bottomLeft, name: 'bottom' },
-            { start: activeBounds.bottomLeft, end: activeBounds.topLeft, name: 'left' }
-        ];
-
-        for (let activeEdge of activeEdges) {
-            for (let otherEdge of otherEdges) {
-                const distance = Math.min(
-                    activeEdge.start.getDistance(otherEdge.start),
-                    activeEdge.start.getDistance(otherEdge.end),
-                    activeEdge.end.getDistance(otherEdge.start),
-                    activeEdge.end.getDistance(otherEdge.end)
-                );
-                if (distance < config.snapThreshold) {
-                    snapPoints.push({
-                        type: 'edgeToEdge',
-                        from: activeEdge.start,
-                        to: otherEdge.start,
-                        distance: distance,
-                        translation: getEdgeAlignment(activeEdge, otherEdge)
-                    });
-                }
-            }
-        }
-
-        return snapPoints;
-    }
-
-    function getEdgeAlignment(edge1, edge2) {
-        // Calculate translation to align edges
-        const translation = edge2.start.subtract(edge1.start);
-        if (edge1.name === edge2.name) {
-            return translation;
-        }
-        // Handle perpendicular edges
-        return translation;
-    }
-
-    function getNearestPointOnLine(p, lineStart, lineEnd) {
-        const line = lineEnd.subtract(lineStart);
-        const len = line.length;
-        const lineNorm = line.divide(len);
-        const projection = p.subtract(lineStart).dot(lineNorm);
-        
-        if (projection <= 0) return lineStart;
-        if (projection >= len) return lineEnd;
-        
-        return lineStart.add(lineNorm.multiply(projection));
-    }
-
-    function showSnapDialog(snaps) {
-        let options = '';
-        const availableTypes = new Set(snaps.map(snap => snap.type));
-        
-        if (availableTypes.has('cornerToCorner')) {
-            options += '🔴 Corner to Corner\n';
-        }
-        if (availableTypes.has('cornerToEdge')) {
-            options += '🟢 Corner to Edge\n';
-        }
-        if (availableTypes.has('edgeToEdge')) {
-            options += '⚫ Edge to Edge\n';
-        }
-        
-        const choice = window.prompt(
-            'Choose snap type:\n\n' + options + '\nOr press Cancel',
-            ''
-        );
-
-        if (choice === null) return null;
-        
-        const lowerChoice = choice.toLowerCase().trim();
-        if (lowerChoice.includes('corner to corner')) return 'cornerToCorner';
-        if (lowerChoice.includes('corner to edge')) return 'cornerToEdge';
-        if (lowerChoice.includes('edge to edge')) return 'edgeToEdge';
-        return null;
+        return minDistance <= config.snapThreshold ? closestPoints : null;
     }
 
     function createRectangle(width, height) {
@@ -231,11 +127,8 @@ window.onload = function() {
 
         const group = new paper.Group([rectangle, topLabel, rightLabel, bottomLabel, leftLabel]);
         
-        let originalPosition = null;
-
         group.onMouseDown = function(event) {
-            originalPosition = this.position.clone();
-            clearGuideLines();
+            clearGuideLine();
         };
         
         group.onMouseDrag = function(event) {
@@ -243,33 +136,29 @@ window.onload = function() {
             updateLabels(this);
 
             if (config.snapEnabled) {
-                clearGuideLines();
-                currentSnaps = [];
+                clearGuideLine();
+                currentSnapPoints = null;
 
                 paper.project.activeLayer.children.forEach(otherGroup => {
                     if (otherGroup !== this && otherGroup instanceof paper.Group) {
-                        const snapResults = findAllSnapPoints(this, otherGroup);
-                        snapResults.forEach(snap => {
-                            createGuideLine(snap.from, snap.to, snap.type);
-                            currentSnaps.push(snap);
-                        });
+                        const snapPoints = findClosestCorners(this, otherGroup);
+                        if (snapPoints) {
+                            createGuideLine(snapPoints.from, snapPoints.to);
+                            currentSnapPoints = snapPoints;
+                        }
                     }
                 });
             }
         };
 
         group.onMouseUp = function(event) {
-            if (config.snapEnabled && currentSnaps.length > 0) {
-                const snapType = showSnapDialog(currentSnaps);
-                if (snapType) {
-                    const selectedSnap = currentSnaps.find(snap => snap.type === snapType);
-                    if (selectedSnap) {
-                        this.translate(selectedSnap.translation);
-                        updateLabels(this);
-                    }
+            if (config.snapEnabled && currentSnapPoints) {
+                if (confirm('Snap corners together?')) {
+                    this.translate(currentSnapPoints.translation);
+                    updateLabels(this);
                 }
             }
-            clearGuideLines();
+            clearGuideLine();
         };
 
         function updateLabels(group) {
@@ -323,7 +212,7 @@ window.onload = function() {
     document.getElementById('toggleSnap').addEventListener('click', function() {
         config.snapEnabled = !config.snapEnabled;
         this.textContent = config.snapEnabled ? 'Disable Snap' : 'Enable Snap';
-        clearGuideLines();
+        clearGuideLine();
     });
 
     document.getElementById('toggleMeasure').addEventListener('click', function() {
