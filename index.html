@@ -40,6 +40,15 @@
             font-size: 16px;
             cursor: pointer;
         }
+        .button-row {
+            display: flex;
+            gap: 10px;
+            margin-top: 5px;
+        }
+        .button-row button {
+            flex: 1;
+            width: auto;
+        }
         input {
             width: 190px;
             padding: 8px;
@@ -53,6 +62,20 @@
             margin-top: 10px;
             font-size: 14px;
         }
+        .divider {
+            height: 1px;
+            background: #ccc;
+            margin: 15px 0;
+        }
+        #zoomSlider {
+            width: 100%;
+            margin: 10px 0;
+        }
+        #visibleWidth {
+            text-align: center;
+            margin-bottom: 5px;
+            font-size: 14px;
+        }
     </style>
 </head>
 <body>
@@ -64,6 +87,13 @@
         <button id="createRect">Create Rectangle</button>
         <button id="toggleSnap">Enable Snap</button>
         <button id="toggleMeasure">Show Measurements</button>
+        <div class="divider"></div>
+        <div id="visibleWidth">Width visible: 4000 mm</div>
+        <input type="range" id="zoomSlider" min="25" max="400" value="100">
+        <div class="button-row">
+            <button id="resetView">Reset View</button>
+            <button id="zoomFit">Zoom to Fit</button>
+        </div>
     </div>
     <canvas id="canvas" resize></canvas>
     <script src="app.js"></script>
