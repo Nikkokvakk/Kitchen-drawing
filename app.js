@@ -340,22 +340,21 @@ window.onload = function() {
         clearGuideLine();
     });
 
-    document.getElementById('toggleMeasure').addEventListener('click', function() {
-        config.measureEnabled = !config.measureEnabled;
-        this.textContent = config.measureEnabled ? 'Hide Measurements' : 'Show Measurements';
-        updateButtonState('toggleMeasure', config.measureEnabled);
-        
-        paper.project.activeLayer.children.forEach(group => {
-            if (group instanceof paper.Group) {
-                for (let i = 1; i < group.children.length; i++) {
-                    if (group.children[i] instanceof paper.PointText) {
-                        group.children[i].visible = config.measureEnabled;
-                    }
-                }
-            }
-        });
-        paper.view.draw();
+document.getElementById('toggleMeasure').addEventListener('click', function() {
+    config.measureEnabled = !config.measureEnabled;
+    this.textContent = config.measureEnabled ? 'Hide Measurements' : 'Show Measurements';
+    updateButtonState('toggleMeasure', config.measureEnabled);
+
+    paper.project.activeLayer.children.forEach(group => {
+        if (group instanceof paper.Group) {
+            group.children.slice(1).forEach(child => {
+                child.visible = config.measureEnabled;
+            });
+        }
     });
+    
+    paper.view.draw();
+});
 
     document.getElementById('createRect').addEventListener('click', function() {
         const width = parseFloat(document.getElementById('width').value);
