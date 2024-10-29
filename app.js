@@ -7,6 +7,7 @@ window.onload = function() {
         snapEnabled: false,
         measureEnabled: true,
         panEnabled: false,
+        cornerModificationEnabled = false;
         snapThreshold: 25,
         scale: 1,
         defaultWidth: 4000,
@@ -175,7 +176,134 @@ window.onload = function() {
 
         return minDistance <= config.snapThreshold ? closestPoints : null;
     }
-  
+
+function createCornerHandle(point, corner) {
+    const handle = new paper.Path.Circle({
+        center: point,
+        radius: 8,
+        fillColor: 'white',
+        strokeColor: 'blue',
+        strokeWidth: 2,
+        name: corner // 'topLeft', 'topRight', 'bottomLeft', or 'bottomRight'
+    });
+
+    // Add guide lines
+    const verticalGuide = new paper.Path.Line({
+        from: point,
+        to: point.add(new paper.Point(0, -40)),
+        strokeColor: 'blue',
+        strokeWidth: 1,
+        dashArray: [4, 4],
+        visible: false
+    });
+
+    const horizontalGuide = new paper.Path.Line({
+        from: point,
+        to: point.add(new paper.Point(40, 0)),
+        strokeColor: 'blue',
+        strokeWidth: 1,
+        dashArray: [4, 4],
+        visible: false
+    });
+
+    return new paper.Group([handle, verticalGuide, horizontalGuide]);
+}
+
+function addCornerHandles(rect) {
+    const bounds = rect.bounds;
+    const corners = {
+        topLeft: bounds.topLeft,
+        topRight: bounds.topRight,
+        bottomLeft: bounds.bottomLeft,
+        bottomRight: bounds.bottomRight
+    };
+
+    const handleGroup = new paper.Group({
+        name: 'cornerHandles'
+    });
+
+    Object.entries(corners).forEach(([corner, point]) => {
+        const handle = createCornerHandle(point, corner);
+        handleGroup.addChild(handle);
+
+        let isDragging = false;
+        let startPoint = null;
+        let originalCorner = null;
+
+        handle.onMouseDown = function(event) {
+            if (config.cornerModificationEnabled) {
+                isDragging = true;
+                startPoint = event.point;
+                originalCorner = point.clone();
+                this.children[1].visible = true;  // Show vertical guide
+                this.children[2].visible = true;  // Show horizontal guide
+            }
+        };
+
+        handle.onMouseDrag = function(event) {
+            if (isDragging && config.cornerModificationEnabled) {
+                const delta = event.point.subtract(startPoint);
+                let newPoint = originalCorner.clone();
+
+                // Constrain movement to vertical or horizontal
+                if (Math.abs(delta.x) > Math.abs(delta.y)) {
+                    newPoint.x += delta.x;
+                } else {
+                    newPoint.y += delta.y;
+                }
+
+                this.position = newPoint;
+                updateCornerGuides(this, newPoint);
+                updateRectangleCorner(rect, corner, newPoint);
+            }
+        };
+
+        handle.onMouseUp = function() {
+            isDragging = false;
+            this.children[1].visible = false;  // Hide vertical guide
+            this.children[2].visible = false;  // Hide horizontal guide
+        };
+    });
+
+    rect.parent.addChild(handleGroup);
+    return handleGroup;
+}
+
+function updateCornerGuides(handle, point) {
+    const verticalGuide = handle.children[1];
+    const horizontalGuide = handle.children[2];
+    
+    verticalGuide.segments[0].point = point;
+    verticalGuide.segments[1].point = point.add(new paper.Point(0, -40));
+    
+    horizontalGuide.segments[0].point = point;
+    horizontalGuide.segments[1].point = point.add(new paper.Point(40, 0));
+}
+
+function updateRectangleCorner(rect, cornerName, newPoint) {
+    // Create a copy of current bounds
+    const bounds = rect.bounds.clone();
+    
+    // Update the appropriate corner
+    switch(cornerName) {
+        case 'topLeft':
+            bounds.topLeft = newPoint;
+            break;
+        case 'topRight':
+            bounds.topRight = newPoint;
+            break;
+        case 'bottomLeft':
+            bounds.bottomLeft = newPoint;
+            break;
+        case 'bottomRight':
+            bounds.bottomRight = newPoint;
+            break;
+    }
+    
+    rect.bounds = bounds;
+    updateLabels(rect.parent);
+}
+
    function createRectangle(width, height) {
         const center = paper.view.center;
         const topLeft = new paper.Point(
@@ -247,6 +375,8 @@ window.onload = function() {
         group.onMouseDown = function(event) {
             if (!config.panEnabled && !isZooming) {
                 clearGuideLine();
+                selectedRect = this;  // Set the selected rectangle
+                updateModifyCornerButton(this);  // Update button state
             }
         };
         
@@ -289,6 +419,16 @@ window.onload = function() {
         paper.view.draw();
         return group;
     }
+
+function updateModifyCornerButton(selectedGroup = null) {
+    const button = document.getElementById('modifyCorner');
+    button.disabled = !selectedGroup;
+    if (!selectedGroup) {
+        config.cornerModificationEnabled = false;
+        button.textContent = 'Modify Corner';
+        button.classList.remove('active');
+    }
+}
 
     const zoomSlider = document.getElementById('zoomSlider');
     zoomSlider.addEventListener('input', function(e) {
@@ -340,21 +480,39 @@ window.onload = function() {
         clearGuideLine();
     });
 
-document.getElementById('toggleMeasure').addEventListener('click', function() {
-    config.measureEnabled = !config.measureEnabled;
-    this.textContent = config.measureEnabled ? 'Hide Measurements' : 'Show Measurements';
-    updateButtonState('toggleMeasure', config.measureEnabled);
+    document.getElementById('toggleMeasure').addEventListener('click', function() {
+        config.measureEnabled = !config.measureEnabled;
+        this.textContent = config.measureEnabled ? 'Hide Measurements' : 'Show Measurements';
+        updateButtonState('toggleMeasure', config.measureEnabled);
 
     paper.project.activeLayer.children.forEach(group => {
         if (group instanceof paper.Group) {
             group.children.slice(1).forEach(child => {
                 child.visible = config.measureEnabled;
-            });
+                });
+            }
+        });
+    
+        paper.view.draw();
+    });
+
+    document.getElementById('modifyCorner').addEventListener('click', function() {
+        config.cornerModificationEnabled = !config.cornerModificationEnabled;
+        this.textContent = config.cornerModificationEnabled ? 'Finish Corner Modification' : 'Modify Corner';
+        updateButtonState('modifyCorner', config.cornerModificationEnabled);
+        
+        if (selectedRect) {
+            if (config.cornerModificationEnabled) {
+                addCornerHandles(selectedRect.children[0]);  // Add handles to the rectangle
+            } else {
+                // Remove handles when finishing
+                const handles = selectedRect.parent.children.find(child => child.name === 'cornerHandles');
+                if (handles) {
+                    handles.remove();
+                }
+            }
         }
     });
-    
-    paper.view.draw();
-});
 
     document.getElementById('createRect').addEventListener('click', function() {
         const width = parseFloat(document.getElementById('width').value);
@@ -439,6 +597,14 @@ document.getElementById('toggleMeasure').addEventListener('click', function() {
         updateWidthDisplay();
         updateCursor();
     }, false);
+
+    // Canvas click handling for deselection
+    paper.view.onMouseDown = function(event) {
+        if (event.target === paper.view.element) {
+            selectedRect = null;
+            updateModifyCornerButton(null);
+        }
+    };
 
     function getPinchDistance(event) {
         const touch1 = event.touches[0];
