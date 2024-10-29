@@ -178,14 +178,14 @@ window.onload = function() {
         return minDistance <= config.snapThreshold ? closestPoints : null;
     }
 
-function createCornerHandle(point, corner) {
+function createCornerHandle(point, cornerName) {
     const handle = new paper.Path.Circle({
         center: point,
         radius: 8,
         fillColor: 'white',
         strokeColor: 'blue',
         strokeWidth: 2,
-        name: corner // 'topLeft', 'topRight', 'bottomLeft', or 'bottomRight'
+        name: cornerName
     });
 
     // Add guide lines
@@ -213,60 +213,68 @@ function createCornerHandle(point, corner) {
 function addCornerHandles(rect) {
     const bounds = rect.bounds;
     const corners = {
-        topLeft: bounds.topLeft,
-        topRight: bounds.topRight,
-        bottomLeft: bounds.bottomLeft,
-        bottomRight: bounds.bottomRight
+        'topLeft': bounds.topLeft,
+        'topRight': bounds.topRight,
+        'bottomLeft': bounds.bottomLeft,
+        'bottomRight': bounds.bottomRight
     };
 
     const handleGroup = new paper.Group({
         name: 'cornerHandles'
     });
 
-    Object.entries(corners).forEach(([corner, point]) => {
-        const handle = createCornerHandle(point, corner);
+    Object.entries(corners).forEach(([cornerName, point]) => {
+        const handle = createCornerHandle(point, cornerName);
         handleGroup.addChild(handle);
 
         let isDragging = false;
         let startPoint = null;
-        let originalCorner = null;
 
         handle.onMouseDown = function(event) {
             if (config.cornerModificationEnabled) {
                 isDragging = true;
                 startPoint = event.point;
-                originalCorner = point.clone();
-                this.children[1].visible = true;  // Show vertical guide
-                this.children[2].visible = true;  // Show horizontal guide
+                event.stopPropagation();
             }
         };
 
-handle.onMouseDrag = function(event) {
-    if (isDragging && config.cornerModificationEnabled) {
-        event.stopPropagation();  // Prevent rectangle dragging
-        const delta = event.point.subtract(startPoint);
-        let newPoint = originalCorner.clone();
+        handle.onMouseDrag = function(event) {
+            if (isDragging && config.cornerModificationEnabled) {
+                event.stopPropagation();
+                
+                const delta = event.point.subtract(startPoint);
+                const movePoint = this.position.add(delta);
 
-        // Constrain movement to vertical or horizontal based on larger delta
-        if (Math.abs(delta.x) > Math.abs(delta.y)) {
-            newPoint.x += delta.x;
-            this.children[2].visible = true;  // Show horizontal guide
-            this.children[1].visible = false; // Hide vertical guide
-        } else {
-            newPoint.y += delta.y;
-            this.children[1].visible = true;  // Show vertical guide
-            this.children[2].visible = false; // Hide horizontal guide
-        }
+                // Determine which guides to show based on movement
+                if (Math.abs(delta.x) > Math.abs(delta.y)) {
+                    // Horizontal movement
+                    movePoint.y = this.position.y;
+                    this.children[2].visible = true;   // Horizontal guide
+                    this.children[1].visible = false;  // Vertical guide
+                } else {
+                    // Vertical movement
+                    movePoint.x = this.position.x;
+                    this.children[1].visible = true;   // Vertical guide
+                    this.children[2].visible = false;  // Horizontal guide
+                }
 
-        // Update handle position and guides
-        this.position = newPoint;
-        updateCornerGuides(this, newPoint);
-        updateRectangleCorner(rect, this.name, newPoint);
-        
-        // Update start point for next drag event
-        startPoint = event.point;
-    }
-};
+                // Update handle position
+                this.position = movePoint;
+
+                // Update rectangle corner
+                const newBounds = rect.bounds.clone();
+                newBounds[cornerName] = movePoint;
+                updateRectangleCorner(rect, cornerName, movePoint);
+
+                // Update guides
+                updateCornerGuides(this, movePoint);
+
+                // Update measurements
+                updateLabels(rect.parent);
+
+                startPoint = event.point;
+            }
+        };
 
         handle.onMouseUp = function() {
             isDragging = false;
