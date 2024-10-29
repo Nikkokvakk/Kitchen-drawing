@@ -29,6 +29,7 @@ window.onload = function() {
     let isPanning = false;
     let lastPoint = null;
     let isZooming = false;
+    let selectedRect = null;
 
     // Guide line
     let guideLine = null;
@@ -375,8 +376,16 @@ function updateRectangleCorner(rect, cornerName, newPoint) {
         group.onMouseDown = function(event) {
             if (!config.panEnabled && !isZooming) {
                 clearGuideLine();
-                selectedRect = this;  // Set the selected rectangle
-                updateModifyCornerButton(this);  // Update button state
+                // Deselect previous rectangle if any
+                if (selectedRect && selectedRect !== this) {
+                    selectedRect.children[0].strokeColor = 'black';
+                    selectedRect.children[0].strokeWidth = 2;
+                }
+                // Select this rectangle
+                selectedRect = this;
+                this.children[0].strokeColor = 'blue';  // Visual feedback
+                this.children[0].strokeWidth = 3;       // Make stroke wider
+                updateModifyCornerButton(this);
             }
         };
         
