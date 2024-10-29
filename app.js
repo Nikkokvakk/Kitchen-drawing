@@ -7,7 +7,7 @@ window.onload = function() {
         snapEnabled: false,
         measureEnabled: true,
         panEnabled: false,
-        cornerModificationEnabled = false,
+        cornerModificationEnabled: false,
         snapThreshold: 25,
         scale: 1,
         defaultWidth: 4000,
