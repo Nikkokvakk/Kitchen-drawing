@@ -82,6 +82,13 @@
             margin-bottom: 5px;
             font-size: 14px;
         }
+        button:disabled {
+            background-color: #cccccc;
+            cursor: not-allowed;
+        }
+        button.active {
+            background-color: #005DC7;
+        }
     </style>
 </head>
 <body>
@@ -101,6 +108,7 @@
             <button id="zoomFit">Zoom to Fit</button>
         </div>
         <button id="togglePan">Enable Pan</button>
+        <button id="modifyCorner" disabled>Modify Corner</button>
     </div>
     <canvas id="canvas" resize></canvas>
     <script src="app.js"></script>
