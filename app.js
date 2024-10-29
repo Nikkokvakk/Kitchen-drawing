@@ -241,23 +241,32 @@ function addCornerHandles(rect) {
             }
         };
 
-        handle.onMouseDrag = function(event) {
-            if (isDragging && config.cornerModificationEnabled) {
-                const delta = event.point.subtract(startPoint);
-                let newPoint = originalCorner.clone();
+handle.onMouseDrag = function(event) {
+    if (isDragging && config.cornerModificationEnabled) {
+        event.stopPropagation();  // Prevent rectangle dragging
+        const delta = event.point.subtract(startPoint);
+        let newPoint = originalCorner.clone();
 
-                // Constrain movement to vertical or horizontal
-                if (Math.abs(delta.x) > Math.abs(delta.y)) {
-                    newPoint.x += delta.x;
-                } else {
-                    newPoint.y += delta.y;
-                }
+        // Constrain movement to vertical or horizontal based on larger delta
+        if (Math.abs(delta.x) > Math.abs(delta.y)) {
+            newPoint.x += delta.x;
+            this.children[2].visible = true;  // Show horizontal guide
+            this.children[1].visible = false; // Hide vertical guide
+        } else {
+            newPoint.y += delta.y;
+            this.children[1].visible = true;  // Show vertical guide
+            this.children[2].visible = false; // Hide horizontal guide
+        }
 
-                this.position = newPoint;
-                updateCornerGuides(this, newPoint);
-                updateRectangleCorner(rect, corner, newPoint);
-            }
-        };
+        // Update handle position and guides
+        this.position = newPoint;
+        updateCornerGuides(this, newPoint);
+        updateRectangleCorner(rect, this.name, newPoint);
+        
+        // Update start point for next drag event
+        startPoint = event.point;
+    }
+};
 
         handle.onMouseUp = function() {
             isDragging = false;
@@ -302,7 +311,57 @@ function updateRectangleCorner(rect, cornerName, newPoint) {
     }
     
     rect.bounds = bounds;
-    updateLabels(rect.parent);
+    
+    // Find the parent group that contains the rectangle and labels
+    const parentGroup = rect.parent;
+    if (parentGroup) {
+        // This is the correct reference to the updateLabels function
+        function updateLabels(group) {
+            const rect = group.children[0];
+            const [topLabel, rightLabel, bottomLabel, leftLabel] = group.children.slice(1);
+
+            topLabel.position = new paper.Point(
+                rect.bounds.center.x,
+                rect.bounds.top + config.labelPadding + topLabel.bounds.height/2
+            );
+            
+            rightLabel.position = new paper.Point(
+                rect.bounds.right - config.labelPadding - rightLabel.bounds.width/2,
+                rect.bounds.center.y
+            );
+            
+            bottomLabel.position = new paper.Point(
+                rect.bounds.center.x,
+                rect.bounds.bottom - config.labelPadding - bottomLabel.bounds.height/2
+            );
+            
+            leftLabel.position = new paper.Point(
+                rect.bounds.left + config.labelPadding + leftLabel.bounds.width/2,
+                rect.bounds.center.y
+            );
+
+            // Update measurements
+            topLabel.children[1].content = Math.round(rect.bounds.width) + ' mm';
+            rightLabel.children[1].content = Math.round(rect.bounds.height) + ' mm';
+            bottomLabel.children[1].content = Math.round(rect.bounds.width) + ' mm';
+            leftLabel.children[1].content = Math.round(rect.bounds.height) + ' mm';
+
+            // Update background sizes
+            group.children.slice(1).forEach(label => {
+                const text = label.children[1];
+                const background = label.children[0];
+                if (background && text) {
+                    background.bounds = new paper.Rectangle(
+                        text.bounds.x - config.labelBackgroundPadding,
+                        text.bounds.y - config.labelBackgroundPadding,
+                        text.bounds.width + (config.labelBackgroundPadding * 2),
+                        text.bounds.height + (config.labelBackgroundPadding * 2)
+                    );
+                }
+            });
+        }
+        updateLabels(parentGroup);
+    }
 }
 
    function createRectangle(width, height) {
