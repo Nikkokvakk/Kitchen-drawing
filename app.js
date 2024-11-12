@@ -223,6 +223,28 @@ function addCornerHandles(rect) {
         name: 'cornerHandles'
     });
 
+    // Create live measurement label
+    const measurementLabel = new paper.PointText({
+        point: new paper.Point(0, 0),
+        content: '',
+        fillColor: 'blue',
+        fontSize: 14,
+        visible: false
+    });
+
+    const measurementBackground = new paper.Path.Rectangle({
+        rectangle: new paper.Rectangle(0, 0, 0, 0),
+        fillColor: new paper.Color(1, 1, 1, 0.8),
+        strokeColor: 'blue',
+        strokeWidth: 1,
+        radius: 3,
+        visible: false
+    });
+
+    const measurementGroup = new paper.Group([measurementBackground, measurementLabel]);
+    measurementGroup.name = 'measurementLabel';
+    handleGroup.addChild(measurementGroup);
+
     Object.entries(corners).forEach(([cornerName, point]) => {
         const handle = createCornerHandle(point, cornerName);
         handle.name = cornerName;
@@ -232,6 +254,7 @@ function addCornerHandles(rect) {
     // Add mouse events to the handle group
     let activeHandle = null;
     let lastPoint = null;
+    let originalDimensions = null;
 
     handleGroup.onMouseDown = function(event) {
         if (config.cornerModificationEnabled) {
@@ -239,7 +262,18 @@ function addCornerHandles(rect) {
             if (hitResult) {
                 activeHandle = hitResult.item.parent;
                 lastPoint = event.point;
+                // Store original dimensions for comparison
+                originalDimensions = {
+                    width: rect.bounds.width,
+                    height: rect.bounds.height
+                };
                 event.stopPropagation();
+
+                // Show measurement label
+                const measurementGroup = handleGroup.children.find(c => c.name === 'measurementLabel');
+                if (measurementGroup) {
+                    measurementGroup.visible = true;
+                }
             }
         }
     };
@@ -274,18 +308,57 @@ function addCornerHandles(rect) {
             // Update guides
             updateCornerGuides(activeHandle, cornerPoint);
 
+            // Update live measurement label
+            const measurementGroup = handleGroup.children.find(c => c.name === 'measurementLabel');
+            if (measurementGroup) {
+                const label = measurementGroup.children[1]; // PointText
+                const background = measurementGroup.children[0]; // Rectangle
+                
+                // Show current dimensions instead of just the change
+                if (Math.abs(delta.x) > Math.abs(delta.y)) {
+                    label.content = `Width: ${Math.round(rect.bounds.width)}mm`;
+                } else {
+                    label.content = `Height: ${Math.round(rect.bounds.height)}mm`;
+                }
+
+                // Position label near the active handle
+                label.position = activeHandle.position.add(new paper.Point(15, -15));
+    
+                // Update background
+                background.bounds = new paper.Rectangle(
+                    label.bounds.x - 5,
+                    label.bounds.y - 3,
+                    label.bounds.width + 10,
+                    label.bounds.height + 6
+                );
+            }
+
+            // Update all measurements immediately
+            updateLabels(rect.parent);
+
             lastPoint = event.point;
         }
     };
 
-    handleGroup.onMouseUp = function() {
-        if (activeHandle) {
-            activeHandle.children[1].visible = false;  // Hide vertical guide
-            activeHandle.children[2].visible = false;  // Hide horizontal guide
-            activeHandle = null;
-            lastPoint = null;
-        }
-    };
+            handleGroup.onMouseUp = function() {
+                if (activeHandle) {
+                    activeHandle.children[1].visible = false;  // Hide vertical guide
+                    activeHandle.children[2].visible = false;  // Hide horizontal guide
+            
+                    // Hide measurement label
+                    const measurementGroup = handleGroup.children.find(c => c.name === 'measurementLabel');
+                    if (measurementGroup) {
+                        measurementGroup.visible = false;
+                    }
+
+                    // Final update of measurements
+                    updateLabels(rect.parent);
+        
+                    activeHandle = null;
+                    lastPoint = null;
+                    originalDimensions = null;
+                }
+            };
 
     rect.parent.addChild(handleGroup);
     return handleGroup;
