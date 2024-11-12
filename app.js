@@ -263,7 +263,6 @@ function addCornerHandles(rect) {
 
                 // Update rectangle corner
                 const newBounds = rect.bounds.clone();
-                newBounds[cornerName] = movePoint;
                 updateRectangleCorner(rect, cornerName, movePoint);
 
                 // Update guides
@@ -323,7 +322,10 @@ function updateRectangleCorner(rect, cornerName, newPoint) {
     // Find the parent group that contains the rectangle and labels
     const parentGroup = rect.parent;
     if (parentGroup) {
-        // This is the correct reference to the updateLabels function
+        updateLabels(parentGroup);
+    }
+}
+    
         function updateLabels(group) {
             const rect = group.children[0];
             const [topLabel, rightLabel, bottomLabel, leftLabel] = group.children.slice(1);
@@ -368,10 +370,7 @@ function updateRectangleCorner(rect, cornerName, newPoint) {
                 }
             });
         }
-        updateLabels(parentGroup);
-    }
-}
-
+    
    function createRectangle(width, height) {
         const center = paper.view.center;
         const topLeft = new paper.Point(
@@ -394,51 +393,6 @@ function updateRectangleCorner(rect, cornerName, newPoint) {
         const leftLabel = createLabel(height + ' mm', new paper.Point(0, 0), false);
 
         const group = new paper.Group([rectangle, topLabel, rightLabel, bottomLabel, leftLabel]);
-
-        function updateLabels(group) {
-            const rect = group.children[0];
-            const [topLabel, rightLabel, bottomLabel, leftLabel] = group.children.slice(1);
-
-            topLabel.position = new paper.Point(
-                rect.bounds.center.x,
-                rect.bounds.top + config.labelPadding + topLabel.bounds.height/2
-            );
-            
-            rightLabel.position = new paper.Point(
-                rect.bounds.right - config.labelPadding - rightLabel.bounds.width/2,
-                rect.bounds.center.y
-            );
-            
-            bottomLabel.position = new paper.Point(
-                rect.bounds.center.x,
-                rect.bounds.bottom - config.labelPadding - bottomLabel.bounds.height/2
-            );
-            
-            leftLabel.position = new paper.Point(
-                rect.bounds.left + config.labelPadding + leftLabel.bounds.width/2,
-                rect.bounds.center.y
-            );
-
-            topLabel.children[1].content = Math.round(rect.bounds.width) + ' mm';
-            rightLabel.children[1].content = Math.round(rect.bounds.height) + ' mm';
-            bottomLabel.children[1].content = Math.round(rect.bounds.width) + ' mm';
-            leftLabel.children[1].content = Math.round(rect.bounds.height) + ' mm';
-
-            group.children.slice(1).forEach(label => {
-                const text = label.children[1];
-                const background = label.children[0];
-                background.bounds = new paper.Rectangle(
-                    text.bounds.x - config.labelBackgroundPadding,
-                    text.bounds.y - config.labelBackgroundPadding,
-                    text.bounds.width + (config.labelBackgroundPadding * 2),
-                    text.bounds.height + (config.labelBackgroundPadding * 2)
-                );
-            });
-
-            [topLabel, rightLabel, bottomLabel, leftLabel].forEach(label => {
-                label.visible = config.measureEnabled;
-            });
-        }
 
         group.onMouseDown = function(event) {
             if (!config.panEnabled && !isZooming) {
@@ -674,11 +628,30 @@ function updateModifyCornerButton(selectedGroup = null) {
         updateCursor();
     }, false);
 
-    // Canvas click handling for deselection
+// Canvas click handling for deselection
     paper.view.onMouseDown = function(event) {
-        if (event.target === paper.view.element) {
-            selectedRect = null;
-            updateModifyCornerButton(null);
+        // Check if we clicked on empty space
+        const hitResult = paper.project.hitTest(event.point);
+        if (!hitResult) {
+            // If there was a selected rectangle, deselect it
+            if (selectedRect) {
+                selectedRect.children[0].strokeColor = 'black';
+                selectedRect.children[0].strokeWidth = 2;
+                selectedRect = null;
+                updateModifyCornerButton(null);
+                
+                // Remove corner handles if they exist
+                if (config.cornerModificationEnabled) {
+                    const handles = paper.project.activeLayer.children.find(child => child.name === 'cornerHandles');
+                    if (handles) {
+                        handles.remove();
+                    }
+                    config.cornerModificationEnabled = false;
+                    const modifyButton = document.getElementById('modifyCorner');
+                    modifyButton.textContent = 'Modify Corner';
+                    modifyButton.classList.remove('active');
+                }
+            }
         }
     };
 
