@@ -251,7 +251,8 @@ function addCornerHandles(rect) {
     });
 
     let activeHandle = null;
-    let dragStartPoint = null;
+    let originalBounds = null;
+    let startPoint = null;
 
     handleGroup.onMouseDown = function(event) {
         if (config.cornerModificationEnabled) {
@@ -264,7 +265,8 @@ function addCornerHandles(rect) {
 
             if (hitResult && hitResult.item.parent.name !== 'measurementLabel') {
                 activeHandle = hitResult.item.parent;
-                dragStartPoint = event.point;
+                originalBounds = rect.bounds.clone();
+                startPoint = event.point;
                 
                 // Show measurement label
                 measurementGroup.visible = true;
@@ -274,79 +276,87 @@ function addCornerHandles(rect) {
     };
 
     handleGroup.onMouseDrag = function(event) {
-    if (activeHandle && config.cornerModificationEnabled) {
-        event.stopPropagation();
-        
-        // Convert screen coordinates to project coordinates
-        const currentPoint = paper.view.viewToProject(event.point);
-        const startPoint = paper.view.viewToProject(dragStartPoint);
-        const delta = currentPoint.subtract(startPoint);
-        
-        // Get the actual handle position in project coordinates
-        const handlePosition = activeHandle.position;
-        const newPosition = handlePosition.add(delta);
+        if (activeHandle && config.cornerModificationEnabled && originalBounds) {
+            event.stopPropagation();
 
-        // Determine primary movement direction
-        const isHorizontal = Math.abs(delta.x) > Math.abs(delta.y);
-        
-        // Create constrained position
-        const constrainedPosition = new paper.Point(
-            isHorizontal ? newPosition.x : handlePosition.x,
-            isHorizontal ? handlePosition.y : newPosition.y
-        );
+            // Calculate total movement from start
+            const totalDelta = event.point.subtract(startPoint);
+            const scaledDelta = totalDelta.divide(paper.view.zoom);
+            
+            // Determine primary movement direction
+            const isHorizontal = Math.abs(totalDelta.x) > Math.abs(totalDelta.y);
 
-        // Show appropriate guide
-        activeHandle.children[1].visible = !isHorizontal;  // vertical guide
-        activeHandle.children[2].visible = isHorizontal;   // horizontal guide
+            // Create new bounds based on original bounds and total movement
+            let newBounds = originalBounds.clone();
+            switch(activeHandle.name) {
+                case 'topLeft':
+                    newBounds.left = originalBounds.left + (isHorizontal ? scaledDelta.x : 0);
+                    newBounds.top = originalBounds.top + (!isHorizontal ? scaledDelta.y : 0);
+                    break;
+                case 'topRight':
+                    newBounds.right = originalBounds.right + (isHorizontal ? scaledDelta.x : 0);
+                    newBounds.top = originalBounds.top + (!isHorizontal ? scaledDelta.y : 0);
+                    break;
+                case 'bottomLeft':
+                    newBounds.left = originalBounds.left + (isHorizontal ? scaledDelta.x : 0);
+                    newBounds.bottom = originalBounds.bottom + (!isHorizontal ? scaledDelta.y : 0);
+                    break;
+                case 'bottomRight':
+                    newBounds.right = originalBounds.right + (isHorizontal ? scaledDelta.x : 0);
+                    newBounds.bottom = originalBounds.bottom + (!isHorizontal ? scaledDelta.y : 0);
+                    break;
+            }
 
-        // Update rectangle and handle
-        updateRectangleCorner(rect, activeHandle.name, constrainedPosition);
-        
-        // Update measurement label
-        const measurementGroup = handleGroup.children.find(c => c.name === 'measurementLabel');
-        if (measurementGroup) {
-            const label = measurementGroup.children[1];
-            const background = measurementGroup.children[0];
-            
-            label.content = isHorizontal 
-                ? `Width: ${Math.round(rect.bounds.width)}mm`
-                : `Height: ${Math.round(rect.bounds.height)}mm`;
-            
-            label.position = activeHandle.position.add(new paper.Point(15, -15));
-            
-            background.bounds = new paper.Rectangle(
-                label.bounds.x - 5,
-                label.bounds.y - 3,
-                label.bounds.width + 10,
-                label.bounds.height + 6
-            );
+            // Only update if new dimensions are valid
+            if (newBounds.width > 1 && newBounds.height > 1) {
+                rect.bounds = newBounds;
+
+                // Update handle positions to match new rectangle bounds
+                Object.entries(corners).forEach(([cornerName, _]) => {
+                    const handle = handleGroup.children.find(child => child.name === cornerName);
+                    if (handle) {
+                        handle.position = rect.bounds[cornerName.toLowerCase()];
+                        
+                        // Show/hide guides
+                        handle.children[1].visible = !isHorizontal && handle === activeHandle;  // vertical
+                        handle.children[2].visible = isHorizontal && handle === activeHandle;   // horizontal
+                        
+                        // Update guide positions
+                        updateCornerGuides(handle, handle.position);
+                    }
+                });
+
+                // Update measurement label
+                const label = measurementGroup.children[1];
+                label.content = isHorizontal 
+                    ? `Width: ${Math.round(rect.bounds.width)}mm`
+                    : `Height: ${Math.round(rect.bounds.height)}mm`;
+                
+                label.position = activeHandle.position.add(new paper.Point(15, -15));
+                
+                const background = measurementGroup.children[0];
+                background.bounds = new paper.Rectangle(
+                    label.bounds.x - 5,
+                    label.bounds.y - 3,
+                    label.bounds.width + 10,
+                    label.bounds.height + 6
+                );
+
+                // Update measurements
+                updateLabels(rect.parent);
+            }
         }
+    };
 
-        // Update dragStartPoint for next drag event
-        dragStartPoint = event.point;
-    }
-};
-
-    handleGroup.onMouseUp = function(event) {
+    handleGroup.onMouseUp = function() {
         if (activeHandle) {
-            // Hide guides
             activeHandle.children[1].visible = false;
             activeHandle.children[2].visible = false;
-            
-            // Hide measurement label
             measurementGroup.visible = false;
-
-            // Update all handles to match rectangle corners
-            Object.entries(corners).forEach(([cornerName, _]) => {
-                const handle = handleGroup.children.find(child => child.name === cornerName);
-                if (handle) {
-                    handle.position = rect.bounds[cornerName.toLowerCase()];
-                }
-            });
-
-            // Reset state
+            
             activeHandle = null;
-            dragStartPoint = null;
+            originalBounds = null;
+            startPoint = null;
         }
     };
 
@@ -363,44 +373,6 @@ function updateCornerGuides(handle, point) {
         
         horizontalGuide.segments[0].point = point;
         horizontalGuide.segments[1].point = point.add(new paper.Point(40, 0));
-    }
-}
-
-function updateRectangleCorner(rect, cornerName, newPoint) {
-    const bounds = rect.bounds.clone();
-    let newBounds;
-    
-    switch(cornerName) {
-        case 'topLeft':
-            newBounds = new paper.Rectangle({
-                from: newPoint,
-                to: bounds.bottomRight
-            });
-            break;
-        case 'topRight':
-            newBounds = new paper.Rectangle({
-                from: new paper.Point(bounds.left, newPoint.y),
-                to: new paper.Point(newPoint.x, bounds.bottom)
-            });
-            break;
-        case 'bottomLeft':
-            newBounds = new paper.Rectangle({
-                from: new paper.Point(newPoint.x, bounds.top),
-                to: new paper.Point(bounds.right, newPoint.y)
-            });
-            break;
-        case 'bottomRight':
-            newBounds = new paper.Rectangle({
-                from: bounds.topLeft,
-                to: newPoint
-            });
-            break;
-    }
-
-    // Ensure minimum dimensions and prevent negative sizes
-    if (newBounds.width >= 1 && newBounds.height >= 1) {
-        rect.bounds = newBounds;
-        updateLabels(rect.parent);
     }
 }
     
